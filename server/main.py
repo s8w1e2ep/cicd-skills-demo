@@ -318,6 +318,51 @@ def debug_cli_binary() -> dict[str, Any]:
     return out
 
 
+@app.post("/debug/cli-print")
+def debug_cli_print() -> dict[str, Any]:
+    """Invoke bundled CLI in one-shot print mode, fully bypassing the SDK.
+
+    The previous probes confirmed:
+      - CLI binary itself is healthy (--version returns 2.1.123)
+      - In stream-json mode, the CLI signals errors via stdout protocol
+        and leaves stderr empty (so we can't see the cause from there)
+
+    By invoking `claude -p "<prompt>"`, the CLI runs in print mode rather
+    than as a stream server. Print-mode errors land on stderr where we
+    can capture them with subprocess.run, finally giving us a real
+    error message.
+    """
+    import subprocess
+
+    _require_env()
+    cli_path = "/usr/local/lib/python3.12/site-packages/claude_agent_sdk/_bundled/claude"
+    out: dict[str, Any] = {"cli_path": cli_path}
+    if not Path(cli_path).exists():
+        out["error"] = "bundled CLI not at expected path"
+        return out
+
+    env = {
+        **os.environ,
+        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
+        "IS_SANDBOX": "1",
+    }
+    try:
+        v = subprocess.run(
+            [cli_path, "-p", "Reply with exactly the word ok and nothing else."],
+            capture_output=True, text=True, timeout=60, env=env,
+        )
+        out["returncode"] = v.returncode
+        out["stdout"] = v.stdout
+        out["stderr"] = v.stderr
+    except subprocess.TimeoutExpired as e:
+        out["error"] = "timeout"
+        out["partial_stdout"] = (e.stdout or b"").decode("utf-8", errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        out["partial_stderr"] = (e.stderr or b"").decode("utf-8", errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
+    except Exception as e:
+        out["error"] = repr(e)
+    return out
+
+
 @app.post("/debug/cli-probe")
 async def debug_cli_probe() -> dict[str, Any]:
     """Smallest possible agent invocation, with full stderr capture.
