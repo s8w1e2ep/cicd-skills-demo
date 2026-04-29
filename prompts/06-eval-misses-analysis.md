@@ -1,4 +1,4 @@
-# 07 — Eval misses analysis
+# 06 — Eval misses analysis
 
 Recorded after running `eval/run_eval.py` against the live Zeabur deploy.
 Report file: `eval/results/eval-20260430-022545.md`. Numbers shown here are
