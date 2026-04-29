@@ -44,7 +44,7 @@ KNOWN_SKILLS = {
     "build-and-release",
 }
 
-app = FastAPI(title="task1-cicd-skills", version="0.1.0")
+app = FastAPI(title="cicd-skills-demo", version="0.1.0")
 
 STATIC_DIR = Path(__file__).parent / "static"
 

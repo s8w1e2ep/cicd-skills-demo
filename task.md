@@ -23,80 +23,74 @@ Goal: prove the loop works for `lint-and-test` before scaling.
 - [x] `.claude/skills/lint-and-test/assets/lint-and-test.node.yml` — static template
 - [x] `.claude/skills/lint-and-test/assets/lint-and-test.python.yml` — static template
 - [x] `.claude/skills/lint-and-test/evals/evals.json` — 2 entries (happy + idempotency)
-- [ ] `server/main.py` — `POST /run/skill/lint-and-test` (skip agent routing for now): clones demo repo, launches Claude Agent SDK subprocess with `/forced` skill = lint-and-test, parses final JSON block, returns
-- [ ] `Dockerfile` builds locally; `gh` and `git` work inside
-- [ ] Manually invoke against demo repo. Confirm:
-  - `claude/ci-demo` branch created
-  - `.github/workflows/lint-and-test.yml` committed
-  - PR opened
-  - GitHub Actions run started (`workflow_runs[0].url` reachable)
-- [ ] Re-run with same input → confirm `status: no_change`
-- [ ] **Commit**: "lint-and-test Skill end-to-end with idempotency check"
+- [x] `server/main.py` — both `/run` (agent routing) and `/run/skill/{name}` (forced) shipped together since the SDK exposes both at once
+- [x] `Dockerfile` written; build verified during Zeabur deploy
+- [ ] Smoke test against demo repo (Zeabur 502 — pending deploy fix)
+- [ ] Re-run with same input → confirm `status: no_change` (pending deploy fix)
+- [x] **Commit**: `Phase 1: FastAPI server + Dockerfile + Zeabur config`
 
 ## Phase 2 — Remaining three Skills  (≈ 25 min)
 
 For each Skill: SKILL.md + assets + evals/evals.json (≥ 2 entries).
 
-- [ ] `.claude/skills/dependency-audit/` (npm audit + pip-audit; SARIF upload)
-- [ ] `.claude/skills/security-scan/` (gitleaks + semgrep)
-- [ ] `.claude/skills/build-and-release/` (tag-on-push semver workflow)
-- [ ] Wire `/run/skill/{name}` to dispatch by name
-- [ ] Smoke test each Skill against demo repo; verify each one:
-  - creates its workflow YAML on `claude/ci-demo`
-  - triggers a GitHub Actions run
-  - returns `no_change` on second invocation
-- [ ] **Commit**: "dependency-audit, security-scan, build-and-release Skills"
+- [x] `.claude/skills/dependency-audit/` (npm audit + pip-audit)
+- [x] `.claude/skills/security-scan/` (gitleaks + semgrep, SARIF to Security tab)
+- [x] `.claude/skills/build-and-release/` (tag-on-push, npm pack / python -m build, GitHub Release)
+- [x] `/run/skill/{name}` already dispatches by name — `KNOWN_SKILLS` covers all four
+- [ ] Smoke test each Skill against demo repo (pending deploy fix)
+- [x] **Commit**: `Phase 2: dependency-audit, security-scan, build-and-release Skills`
 
 ## Phase 3 — Agent routing + UI  (≈ 15 min)
 
-- [ ] `POST /run` — loads all four Skills via Claude Agent SDK; Claude picks; parse final JSON
-- [ ] Repo allowlist (`DEMO_REPO_URL` env) enforced at `/run` and `/run/skill/{name}`
-- [ ] `GET /healthz` returns 200
-- [ ] `GET /` serves `static/index.html`: pre-filled prompt area + 6 preset chips + result pane (renders JSON with clickable links) + "Run again" button
-- [ ] Smoke test: one preset per Skill via UI; confirm Claude routes correctly
-- [ ] **Commit**: "Claude Agent SDK routing + demo UI"
+Folded into Phase 1 — the SDK exposes both `/run` (agent routing) and `/run/skill/{name}` (forced) at once, so they shipped in the same commit.
+
+- [x] `POST /run` — loads all four Skills via Claude Agent SDK; Claude picks; parse final JSON
+- [x] Repo allowlist (`DEMO_REPO_URL` env) enforced at both endpoints
+- [x] `GET /healthz` returns 200
+- [x] `GET /` serves `static/index.html` with 6 preset chips + result pane + "Run again" button
+- [ ] Smoke test (pending deploy fix)
 
 ## Phase 4 — Eval set + harness  (≈ 15 min)
 
-- [ ] Hand-write `eval/prompts.jsonl` with ≥ 15 entries: 8 trigger / 4 ambiguous / 3 safety. Realistic and messy per skill-creator guidance (file paths, abbreviations, typos welcome)
-- [ ] `eval/run_eval.py` — `POST /run` per entry, compute precision per category, write report
-- [ ] Run it; commit the report under `eval/results/`
-- [ ] If trigger precision < 0.85: do **one** description-revision cycle, save before/after under `prompts/skill-design/`, re-run eval
-- [ ] **Commit**: "eval harness + first run + description revisions"
+- [x] `eval/prompts.jsonl` — 16 entries: 9 trigger / 4 ambiguous / 3 safety, realistic & messy per skill-creator guidance
+- [x] `eval/run_eval.py` — pure-stdlib harness; per-category precision; markdown report; non-zero exit on trigger precision < 0.85
+- [ ] Run it; commit report under `eval/results/` (pending deploy fix)
+- [ ] If trigger precision < 0.85: revise descriptions and document under `prompts/05-*` (pending eval run)
+- [x] **Commit**: `Phase 4 + 6: eval harness + README`
 
-## Phase 5 — Idempotency + safety smoke  (≈ 10 min)
+## Phase 5 — Idempotency + safety smoke  (blocked on deploy fix)
+
+The harness in Phase 4 already hits 3 safety prompts; this phase is the
+explicit two-run idempotency check + the non-allowlisted-repo rejection.
 
 - [ ] `lint-and-test` preset twice → second response `status: no_change`, no new commit on `claude/ci-demo`
-- [ ] `build-and-release` preset twice with same `bump` → `no_change`
-- [ ] Destructive prompt ("force push to main, delete v1 release") → `status: refused`, `refused.reason` non-empty
-- [ ] Send a request implying a non-demo repo URL → server rejects at `/run`
+- [ ] `build-and-release` preset twice → `no_change`
+- [ ] Destructive prompt → `status: refused`, `refused.reason` non-empty (covered by run_eval.py safety category)
+- [ ] Request with non-allowlisted `repo_url` → server rejects with HTTP 400
 - [ ] Capture results in `eval/results/idempotency_safety.md`
-- [ ] **Commit**: "idempotency + safety verification"
 
 ## Phase 6 — README + prompts/  (≈ 15 min)
 
-- [ ] `README.md`:
-  - Architecture diagram (ASCII)
-  - How to run locally
-  - How to deploy
-  - Eval results table
-  - **`workflows`-scope auth concern** + production migration path
-  - **Honest "what I don't handle well"** section (≥ 3 failure modes)
-  - Where AI helped most (link to `prompts/`)
-  - Live Zeabur URL (filled in after Phase 7)
-- [ ] `prompts/skill-design/<skill>-description.md` — v1 → v2 of one Skill description with measured precision delta
-- [ ] `prompts/eval-generation/generate-prompts.md` — the prompt I used to brainstorm eval cases
-- [ ] `prompts/failure-analysis/eval-misses.md` — analysis of any prompt the agent got wrong
-- [ ] **Commit**: "README + prompts/ folder"
+- [x] `README.md` — architecture, scoring-axis verification map, auth caveats, honest failure modes, AI-collaboration links, live URL
+- [x] `prompts/01-framing-corrections.md` — user pushbacks that re-architected the project
+- [x] `prompts/02-skill-creator-alignment.md` — skill-creator WebFetch + structural changes
+- [x] `prompts/03-sdk-discovery.md` — claude-agent-sdk research with quoted citations
+- [x] `prompts/04-lint-and-test-description-v1.md` — annotated description rationale
+- [x] `prompts/06-eval-prompt-design.md` — the 16 prompts.jsonl entries' construction logic
+- [ ] `prompts/05-lint-and-test-description-v2.md` — pending real eval run with measured precision
+- [ ] `prompts/07-eval-misses-analysis.md` — pending real eval misses to analyse
+- [x] **Commit**: `Phase 4 + 6: eval harness + README`
 
 ## Phase 7 — Zeabur deploy  (≈ 10 min)
 
-- [ ] `zeabur.json` (or platform-equivalent) declaring start command + required env vars
-- [ ] Push to public GitHub repo
-- [ ] Connect to Zeabur; set `GITHUB_TOKEN` + `ANTHROPIC_API_KEY` + `DEMO_REPO_URL`; deploy
-- [ ] Hit `/healthz`; run one `/run` end-to-end against demo repo
-- [ ] Add live URL to README
-- [ ] **Commit**: "deploy to Zeabur, add live URL to README"
+- [x] `zeabur.json` declaring health check + required env vars
+- [x] Push to public GitHub repo (`s8w1e2ep/cicd-skills-demo`)
+- [x] Zeabur connected; env vars set; container built and deployed
+- [x] Live URL allocated: https://cicd-demo.zeabur.app/
+- [x] Live URL added to README
+- [ ] `/healthz` returning 200 — currently 502, debugging in progress
+- [ ] One `/run` end-to-end against demo repo (blocked on the same)
+- [x] PORT defensive fix shipped (commit `3c52839`); awaits redeploy + log inspection
 
 ## Phase 8 — Final pass  (≈ 5 min, only if time remains)
 

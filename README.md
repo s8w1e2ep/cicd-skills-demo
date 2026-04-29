@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Live demo (Zeabur)** | _filled in after deploy_ |
+| **Live demo (Zeabur)** | https://cicd-demo.zeabur.app/ |
 | **Demo target repo** | this same repo (`s8w1e2ep/cicd-skills-demo`) |
 | **Stack** | Python 3.12 · FastAPI · `claude-agent-sdk` · Docker |
 | **Model** | `claude-opus-4-7` (adaptive thinking off; default effort) |
