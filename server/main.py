@@ -287,25 +287,33 @@ def debug_cli_binary() -> dict[str, Any]:
     except Exception as e:
         out["node_run_error"] = repr(e)
 
-    # Try the most likely CLI entrypoint paths from npm-installed location.
-    for candidate in [
+    # Try the most likely CLI entrypoint paths. Bundled SDK candidates are
+    # checked first because the previous probe showed no `claude` on PATH.
+    candidate_paths = list(out.get("cli_candidates", [])) + [
         "/usr/local/bin/claude",
         "/usr/bin/claude",
         "/root/.npm-global/bin/claude",
-    ]:
-        if Path(candidate).exists():
-            out["claude_at_path"] = candidate
+    ]
+    out["probes"] = []
+    for candidate in candidate_paths:
+        if not Path(candidate).exists():
+            continue
+        probe: dict[str, Any] = {"path": candidate}
+        # Try invoking directly first (file may have a shebang or be executable).
+        for argv in (
+            [candidate, "--version"],
+            ["node", candidate, "--version"],
+        ):
             try:
                 v = subprocess.run(
-                    [candidate, "--version"],
-                    capture_output=True, text=True, timeout=15,
+                    argv, capture_output=True, text=True, timeout=15,
                 )
-                out["claude_version_stdout"] = v.stdout
-                out["claude_version_stderr"] = v.stderr
-                out["claude_version_returncode"] = v.returncode
+                probe[f"{argv[0]}__stdout"] = v.stdout
+                probe[f"{argv[0]}__stderr"] = v.stderr
+                probe[f"{argv[0]}__returncode"] = v.returncode
             except Exception as e:
-                out["claude_version_error"] = repr(e)
-            break
+                probe[f"{argv[0]}__error"] = repr(e)
+        out["probes"].append(probe)
 
     return out
 
