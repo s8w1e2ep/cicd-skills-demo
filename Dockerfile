@@ -50,6 +50,16 @@ RUN useradd --create-home --shell /bin/bash app \
  && chown -R app:app /app
 USER app
 
+# Tell the bundled Claude Code CLI it's already in a sandbox so it doesn't
+# refuse `--dangerously-skip-permissions` when uid happens to be 0. Zeabur's
+# runtime ignores the Dockerfile's `USER app` directive (verified via
+# /healthz?uid=0), so the non-root path alone wasn't enough; this env var
+# is a community-known escape hatch surfaced via levelsio + claude-code
+# issue #3490 (still undocumented officially as of 2026-04). Safe here
+# because the per-request scratch clone + repo allowlist already bound
+# what the CLI can touch — the root check would have been redundant anyway.
+ENV IS_SANDBOX=1
+
 # Honour $PORT if the platform injects one (Zeabur, Heroku-style); fall back to 8000.
 ENV PORT=8000
 EXPOSE 8000
