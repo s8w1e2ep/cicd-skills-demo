@@ -29,7 +29,15 @@ from .agent_runner import run_agent
 
 DEMO_REPO_URL = os.environ.get("DEMO_REPO_URL", "").rstrip("/")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+# Claude auth: either an Anthropic API key (Console billing, charged per call)
+# or a long-lived OAuth token from `claude setup-token` (Pro/Max subscription
+# billing). Per the auth precedence in
+# https://code.claude.com/docs/en/authentication, ANTHROPIC_API_KEY is #3 and
+# CLAUDE_CODE_OAUTH_TOKEN is #5 — so if both are set, the API key wins. Keep
+# them mutually exclusive in deploy: Zeabur env vars should have one and only
+# one of these.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+CLAUDE_CODE_OAUTH_TOKEN = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
 
 DEMO_BRANCH = "claude/ci-demo"
 
@@ -77,16 +85,21 @@ class RunResponse(BaseModel):
 
 
 def _require_env() -> None:
-    """Fail fast on missing config so we don't waste a Claude run."""
+    """Fail fast on missing config so we don't waste a Claude run.
+
+    Claude auth is satisfied by either ANTHROPIC_API_KEY or
+    CLAUDE_CODE_OAUTH_TOKEN — accept either one rather than requiring both.
+    """
     missing = [
         name
         for name, val in [
             ("DEMO_REPO_URL", DEMO_REPO_URL),
             ("GITHUB_TOKEN", GITHUB_TOKEN),
-            ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
         ]
         if not val
     ]
+    if not (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN):
+        missing.append("ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN")
     if missing:
         raise HTTPException(
             status_code=503,
@@ -186,6 +199,7 @@ def healthz() -> dict[str, Any]:
         "demo_repo_configured": bool(DEMO_REPO_URL),
         "github_token_configured": bool(GITHUB_TOKEN),
         "anthropic_key_configured": bool(ANTHROPIC_API_KEY),
+        "oauth_token_configured": bool(CLAUDE_CODE_OAUTH_TOKEN),
         "uid": os.getuid(),
     }
 

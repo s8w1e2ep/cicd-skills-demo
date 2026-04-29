@@ -25,6 +25,23 @@ def configured(monkeypatch):
     monkeypatch.setattr(server.main, "DEMO_REPO_URL", "https://github.com/test/demo")
     monkeypatch.setattr(server.main, "GITHUB_TOKEN", "ghp_test_token")
     monkeypatch.setattr(server.main, "ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(server.main, "CLAUDE_CODE_OAUTH_TOKEN", "")
+    return server.main
+
+
+@pytest.fixture
+def configured_oauth(monkeypatch):
+    """Same as `configured` but uses an OAuth token instead of API key.
+
+    Mirrors the deploy mode where Pro/Max subscription auth replaces API
+    billing — we want to confirm /run still works in this configuration.
+    """
+    import server.main
+
+    monkeypatch.setattr(server.main, "DEMO_REPO_URL", "https://github.com/test/demo")
+    monkeypatch.setattr(server.main, "GITHUB_TOKEN", "ghp_test_token")
+    monkeypatch.setattr(server.main, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(server.main, "CLAUDE_CODE_OAUTH_TOKEN", "oauth-test-token")
     return server.main
 
 
@@ -35,6 +52,7 @@ def unconfigured(monkeypatch):
     monkeypatch.setattr(server.main, "DEMO_REPO_URL", "")
     monkeypatch.setattr(server.main, "GITHUB_TOKEN", "")
     monkeypatch.setattr(server.main, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(server.main, "CLAUDE_CODE_OAUTH_TOKEN", "")
     return server.main
 
 
@@ -52,7 +70,18 @@ def test_healthz_reports_all_configured(configured):
     assert body["demo_repo_configured"] is True
     assert body["github_token_configured"] is True
     assert body["anthropic_key_configured"] is True
+    assert body["oauth_token_configured"] is False
     assert isinstance(body["uid"], int)
+
+
+def test_healthz_reports_oauth_configured(configured_oauth):
+    """Pro/Max subscription deploy: OAuth token, no API key."""
+    client = TestClient(configured_oauth.app)
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["anthropic_key_configured"] is False
+    assert body["oauth_token_configured"] is True
 
 
 def test_healthz_reports_unconfigured(unconfigured):
@@ -63,6 +92,7 @@ def test_healthz_reports_unconfigured(unconfigured):
     assert body["demo_repo_configured"] is False
     assert body["github_token_configured"] is False
     assert body["anthropic_key_configured"] is False
+    assert body["oauth_token_configured"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +109,29 @@ def test_run_returns_503_when_not_configured(unconfigured):
     detail = r.json()["detail"]
     assert "missing env var" in detail
     assert "DEMO_REPO_URL" in detail
+    assert "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN" in detail
+
+
+def test_run_accepts_oauth_only_config(configured_oauth, monkeypatch):
+    """OAuth-only deploy is a valid config — /run should pass _require_env."""
+    monkeypatch.setattr(configured_oauth, "_prepare_scratch_clone", lambda: "/tmp/fake")
+    monkeypatch.setattr("shutil.rmtree", lambda *a, **kw: None)
+
+    async def fake_run_agent(**kwargs):
+        from server.agent_runner import AgentResult
+
+        return AgentResult(
+            parsed={"skill": "lint-and-test", "status": "created"},
+            raw_final_text="",
+            duration_s=0.1,
+            num_turns=1,
+            cost_usd=None,
+        )
+
+    monkeypatch.setattr(configured_oauth, "run_agent", fake_run_agent)
+    client = TestClient(configured_oauth.app)
+    r = client.post("/run", json={"prompt": "test"})
+    assert r.status_code == 200
 
 
 def test_run_rejects_non_allowlisted_repo_url(configured):
