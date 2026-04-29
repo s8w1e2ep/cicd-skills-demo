@@ -8,11 +8,12 @@ Each phase ends in a **commit** with an intent-revealing message. The grader wil
 
 ## Phase 0 — Repo init  (≈ 5 min)
 
-- [ ] `git init` inside `task1-cicd-skills/`
-- [ ] `.gitignore`: Python, `.env`, `/tmp`, scratch dirs, `eval/results/*.md` (keep one sample)
-- [ ] Create the **demo repo on GitHub** (public, empty), record URL
-- [ ] Generate fine-grained PAT scoped to demo repo, `Contents: write` + `Workflows: write`
-- [ ] First commit: "scaffold spec/plan/task docs and CLAUDE.md"
+- [x] `git init` inside `task1-cicd-skills/`
+- [x] `.gitignore`: Python, `.env`, `/tmp`, scratch dirs, `eval/results/*.md` (keep one sample)
+- [x] First commit: "scaffold spec/plan/task docs and CLAUDE.md"
+- [ ] Push this repo to GitHub as a public repo — **this same repo is the demo target** (Skills operate on it). User does this when ready.
+- [ ] Generate fine-grained PAT scoped to this repo, `Contents: write` + `Workflows: write`. Stored as Zeabur secret env var `GITHUB_TOKEN`; not needed locally.
+- [ ] `ANTHROPIC_API_KEY` will also be a Zeabur secret env var; not needed locally.
 
 ## Phase 1 — One Skill end-to-end  (≈ 30 min)
 
