@@ -1,0 +1,17 @@
+{
+  "skill_name": "security-scan",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我加上自動掃描程式碼裡有沒有外洩 token 或常見安全 bug 的 CI",
+      "expected_output": "Writes .github/workflows/security-scan.yml on claude/ci-demo with two jobs (gitleaks for secret detection, semgrep for SAST), each running on push, pull_request, and weekly schedule. Uploads SARIF to GitHub Security. Commits and pushes; opens or reuses the PR. Final JSON has skill='security-scan', status='created' on first run, populated commit_url and pr_url, and at least one workflow run URL.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "再執行一次 security-scan 設定（理論上應該不會有變化）",
+      "expected_output": "Reads existing .github/workflows/security-scan.yml; semantic compare returns SAME; skill exits without committing. Final JSON has status='no_change', commit_url is the previous commit, pr_url is the existing PR.",
+      "files": []
+    }
+  ]
+}

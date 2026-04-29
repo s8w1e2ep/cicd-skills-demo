@@ -1,0 +1,17 @@
+{
+  "skill_name": "build-and-release",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我加一個 release workflow — 推 git tag 之後自動 build 並開 GitHub Release",
+      "expected_output": "Detects the repo's language stack from package.json / pyproject.toml. Writes .github/workflows/release.yml on a branch named claude/ci-demo with a tag-triggered job (on: push: tags: 'v*'), building the artifact (npm pack for Node, python -m build for Python), and creating a GitHub Release via softprops/action-gh-release@v2. Commits and pushes; opens or reuses the PR back to the default branch. Final JSON has skill='build-and-release', status='created' on first run, populated commit_url and pr_url. workflow_runs may be empty because the workflow is tag-triggered — `notes` should call this out.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "再執行一次 build-and-release 設定（同樣的需求）",
+      "expected_output": "Reads existing .github/workflows/release.yml; semantic compare returns SAME; skill exits without committing. Final JSON has status='no_change', commit_url is the previous commit, pr_url is the existing PR.",
+      "files": []
+    }
+  ]
+}

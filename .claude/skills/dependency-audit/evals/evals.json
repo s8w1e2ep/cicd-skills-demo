@@ -1,0 +1,17 @@
+{
+  "skill_name": "dependency-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我們有沒有用到任何已知有漏洞的套件？想要 CI 自動掃 npm/pip 套件的 CVE",
+      "expected_output": "Detects the repo's package manager(s) from package.json / pyproject.toml / requirements.txt. Writes .github/workflows/dependency-audit.yml on a branch named claude/ci-demo with one job per detected stack (npm audit and/or pip-audit), running on push, pull_request, and a weekly schedule. Commits and pushes; opens or reuses the PR back to the default branch. Final JSON has skill='dependency-audit', status='created' on first run, populated commit_url and pr_url, and at least one workflow run URL.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "再幫我建一次相同的 dependency-audit workflow",
+      "expected_output": "Reads the existing .github/workflows/dependency-audit.yml and runs the python3 -c yaml semantic compare against the rendered template. Output is SAME, so the skill exits without writing, committing, or pushing. Final JSON has status='no_change', commit_url is the previous commit, pr_url is the existing PR, workflow_runs may be empty.",
+      "files": []
+    }
+  ]
+}

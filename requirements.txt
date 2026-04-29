@@ -1,3 +1,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 claude-agent-sdk>=0.0.13
+# Used by the Skills' idempotency check (`python3 -c "import yaml; ..."`).
+# Must be in the container's global Python because the agent's Bash tool
+# inherits the runtime interpreter, not a project venv.
+PyYAML>=6.0
