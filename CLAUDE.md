@@ -1,4 +1,4 @@
-# CLAUDE.md — task1-cicd-skills
+# CLAUDE.md — cicd-skills-demo
 
 This file gives future Claude Code sessions the context to keep working on this project without re-deriving conventions from scratch.
 
@@ -25,7 +25,7 @@ All four push to a single shared branch `claude/ci-demo` on the demo repo, with 
 ## Layout
 
 ```
-task1-cicd-skills/
+cicd-skills-demo/
 ├── .claude/skills/               # one directory per Skill (path required by claude-agent-sdk)
 │   └── <name>/
 │       ├── SKILL.md              # frontmatter (pushy description) + body (< 500 lines)

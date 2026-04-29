@@ -8,7 +8,7 @@ Each phase ends in a **commit** with an intent-revealing message. The grader wil
 
 ## Phase 0 — Repo init  (≈ 5 min)
 
-- [x] `git init` inside `task1-cicd-skills/`
+- [x] `git init` inside `cicd-skills-demo/`
 - [x] `.gitignore`: Python, `.env`, `/tmp`, scratch dirs, `eval/results/*.md` (keep one sample)
 - [x] First commit: "scaffold spec/plan/task docs and CLAUDE.md"
 - [ ] Push this repo to GitHub as a public repo — **this same repo is the demo target** (Skills operate on it). User does this when ready.

@@ -25,7 +25,7 @@
       "required": true
     },
     "DEMO_REPO_URL": {
-      "description": "HTTPS URL of the demo repo, e.g. https://github.com/<user>/task1-cicd-skills",
+      "description": "HTTPS URL of the demo repo, e.g. https://github.com/<user>/cicd-skills-demo",
       "required": true
     },
     "GIT_USER_NAME": {

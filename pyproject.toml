@@ -1,5 +1,5 @@
 [project]
-name = "task1-cicd-skills"
+name = "cicd-skills-demo"
 version = "0.1.0"
 description = "GitHub CI/CD as Claude Skills — demo service"
 requires-python = ">=3.12"
