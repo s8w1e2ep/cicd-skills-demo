@@ -118,7 +118,7 @@ Each SKILL.md includes a step like:
 
 ### 4.7 Auth & safety
 
-- `GITHUB_TOKEN` env: fine-grained PAT scoped to **one demo repo only**, with `Contents: write` and `Workflows: write`.
+- `GITHUB_TOKEN` env: fine-grained PAT scoped to **one demo repo only**, with: `Contents: write` (clone/push), `Workflows: write` (commit files under `.github/workflows/`), `Pull requests: write` (`gh pr create`/`list`), `Actions: read` (`gh run list`). `Metadata: read` is implicit.
 - The `workflows` scope is sensitive — workflows can read repo secrets. README must call this out and propose GitHub App + per-installation tokens as the production migration path.
 - Server hard-rejects any request whose target repo doesn't match the env-allowlisted demo repo. This is the primary safety wall.
 - Destructive operations (delete branch, force push, remove existing workflow, delete release) are not Skills. Claude must produce `status: refused` with a reason.

@@ -21,7 +21,7 @@
       "required": true
     },
     "GITHUB_TOKEN": {
-      "description": "Fine-grained GitHub PAT scoped to the demo repo with Contents:write + Workflows:write",
+      "description": "Fine-grained GitHub PAT scoped to the demo repo. Required permissions: Contents:write (clone/push), Workflows:write (modify .github/workflows/), Pull requests:write (gh pr create), Actions:read (gh run list). Metadata:read is granted implicitly.",
       "required": true
     },
     "DEMO_REPO_URL": {

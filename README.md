@@ -118,7 +118,18 @@ The server hard-rejects any request whose target repo doesn't match the env-allo
 
 ### `workflows` scope is sensitive — and we use it
 
-The fine-grained PAT used by the demo needs `Contents: write` AND `Workflows: write`. The `workflows` permission is non-trivially powerful: workflows can read repo secrets, so granting write to that surface area means anyone able to commit a workflow can effectively exfiltrate any secret stored in the repo's Actions secrets. We mitigate by:
+The fine-grained PAT used by the demo needs four permissions on the demo repo:
+
+| Permission | Level | Used by |
+|---|---|---|
+| **Contents** | Read and write | `git clone` (HTTPS with embedded token) and `git push` of the workflow file commit |
+| **Workflows** | Read and write | required to commit any file under `.github/workflows/`. Distinct from Contents — GitHub treats `.github/workflows/*` as a separate, more sensitive surface |
+| **Pull requests** | Read and write | `gh pr list` to check whether the demo PR exists, `gh pr create` to open it the first time |
+| **Actions** | Read | `gh run list --branch claude/ci-demo` to populate `workflow_runs` in the response so the UI can deep-link into a freshly-started run |
+
+`Metadata: read` is implicit on every fine-grained PAT and can't be revoked.
+
+The **Workflows** permission is the non-trivial one: workflows can read repo secrets, so granting write means whoever holds the token can effectively exfiltrate any secret stored in the repo's Actions secrets. We mitigate by:
 
 - Scoping the PAT to **one** repo (the demo).
 - Never logging the token. The server embeds it only in the clone URL passed to `git`, and `git` strips credentials from its own remote-tracking config on clone.
@@ -165,7 +176,7 @@ pip install -r requirements.txt
 
 # Required env vars
 export ANTHROPIC_API_KEY=...                                # for the Agent SDK
-export GITHUB_TOKEN=ghp_...                                 # fine-grained PAT for this repo
+export GITHUB_TOKEN=ghp_...                                 # fine-grained PAT — see Auth & safety for the 4 required permissions
 export DEMO_REPO_URL=https://github.com/s8w1e2ep/cicd-skills-demo
 
 uvicorn server.main:app --reload --port 8000

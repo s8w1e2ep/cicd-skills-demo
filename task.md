@@ -12,7 +12,7 @@ Each phase ends in a **commit** with an intent-revealing message. The grader wil
 - [x] `.gitignore`: Python, `.env`, `/tmp`, scratch dirs, `eval/results/*.md` (keep one sample)
 - [x] First commit: "scaffold spec/plan/task docs and CLAUDE.md"
 - [ ] Push this repo to GitHub as a public repo — **this same repo is the demo target** (Skills operate on it). User does this when ready.
-- [ ] Generate fine-grained PAT scoped to this repo, `Contents: write` + `Workflows: write`. Stored as Zeabur secret env var `GITHUB_TOKEN`; not needed locally.
+- [ ] Generate fine-grained PAT scoped to this repo: `Contents: write` + `Workflows: write` + `Pull requests: write` + `Actions: read`. Stored as Zeabur secret env var `GITHUB_TOKEN`; not needed locally.
 - [ ] `ANTHROPIC_API_KEY` will also be a Zeabur secret env var; not needed locally.
 
 ## Phase 1 — One Skill end-to-end  (≈ 30 min)
