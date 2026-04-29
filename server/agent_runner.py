@@ -57,6 +57,11 @@ class AgentResult:
     cost_usd: float | None
     parse_error: str | None = None
     transcript: list[str] = field(default_factory=list)
+    # The bundled CLI's stderr — by default the SDK inherits the parent fd and
+    # bakes a placeholder string ("Check stderr output for details") into any
+    # ProcessError it raises, which means callers see no actual error content.
+    # Capturing via the stderr callback lets us surface real diagnostics.
+    stderr_lines: list[str] = field(default_factory=list)
 
 
 _JSON_FENCE_RE = re.compile(
@@ -97,6 +102,13 @@ async def run_agent(
     extra_env: dict[str, str] | None = None,
 ) -> AgentResult:
     """Run the agent in `cwd` and return the parsed final JSON block."""
+    stderr_lines: list[str] = []
+
+    def _capture_stderr(line: str) -> None:
+        # Trim trailing newline; keep everything else as the CLI emits it so
+        # multi-line tracebacks/JSON payloads stay intact when surfaced.
+        stderr_lines.append(line.rstrip("\n"))
+
     options = ClaudeAgentOptions(
         model=model,
         cwd=cwd,
@@ -108,6 +120,9 @@ async def run_agent(
         permission_mode="bypassPermissions",
         max_turns=max_turns,
         env=extra_env or {},
+        # Capture stderr line-by-line so caller can see actual diagnostics
+        # instead of the SDK's placeholder ProcessError text.
+        stderr=_capture_stderr,
     )
 
     started = time.monotonic()
@@ -116,17 +131,24 @@ async def run_agent(
     num_turns: int | None = None
     cost_usd: float | None = None
 
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            text = "".join(
-                block.text for block in message.content if isinstance(block, TextBlock)
-            )
-            if text:
-                last_assistant_text = text
-                transcript.append(text)
-        elif isinstance(message, ResultMessage):
-            num_turns = message.num_turns
-            cost_usd = message.total_cost_usd
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                text = "".join(
+                    block.text for block in message.content if isinstance(block, TextBlock)
+                )
+                if text:
+                    last_assistant_text = text
+                    transcript.append(text)
+            elif isinstance(message, ResultMessage):
+                num_turns = message.num_turns
+                cost_usd = message.total_cost_usd
+    except BaseException as e:
+        # Re-raise but attach stderr so the caller's exception handler can
+        # surface it. We use a custom attribute since the SDK's ProcessError
+        # has a fixed shape.
+        e.captured_stderr = stderr_lines  # type: ignore[attr-defined]
+        raise
 
     parsed, err = _extract_last_json(last_assistant_text)
     return AgentResult(
@@ -137,4 +159,5 @@ async def run_agent(
         cost_usd=cost_usd,
         parse_error=err,
         transcript=transcript,
+        stderr_lines=stderr_lines,
     )

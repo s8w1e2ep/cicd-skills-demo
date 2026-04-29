@@ -73,6 +73,14 @@
     pre {
       background: var(--code-bg); color: var(--code-fg); padding: 12px;
       border-radius: 6px; overflow: auto; font-size: 12px; line-height: 1.5;
+      max-height: 360px; white-space: pre-wrap; word-break: break-word;
+    }
+    pre.stderr {
+      background: #1f1414; color: #fecaca; max-height: 240px;
+    }
+    .stderr-label {
+      font-size: 12px; color: var(--muted); margin: 12px 0 4px;
+      text-transform: uppercase; letter-spacing: 0.05em;
     }
     .error { color: var(--error); }
     .spinner {
@@ -116,6 +124,8 @@
     <div id="skill-summary"></div>
     <div class="links" id="result-links"></div>
     <pre id="result-json"></pre>
+    <div class="stderr-label" id="stderr-label" style="display:none;">CLI stderr</div>
+    <pre class="stderr" id="result-stderr" style="display:none;"></pre>
     <div class="meta" id="result-meta"></div>
   </div>
 
@@ -128,7 +138,22 @@
     const skillSummary = document.getElementById("skill-summary");
     const resultLinks = document.getElementById("result-links");
     const resultJson = document.getElementById("result-json");
+    const resultStderr = document.getElementById("result-stderr");
+    const stderrLabel = document.getElementById("stderr-label");
     const resultMeta = document.getElementById("result-meta");
+
+    function showStderr(lines) {
+      // Accept array of lines OR string — render as block of text with line breaks.
+      if (!lines || (Array.isArray(lines) && lines.length === 0)) {
+        resultStderr.style.display = "none";
+        stderrLabel.style.display = "none";
+        return;
+      }
+      const text = Array.isArray(lines) ? lines.join("\n") : String(lines);
+      resultStderr.textContent = text;
+      resultStderr.style.display = "block";
+      stderrLabel.style.display = "block";
+    }
 
     let lastPrompt = null;
 
@@ -174,6 +199,7 @@
       resultLinks.innerHTML = links.join("");
 
       resultJson.textContent = JSON.stringify(data.output, null, 2);
+      showStderr(data.stderr_lines);
 
       const metaParts = [`took ${data.duration_s.toFixed(1)}s`];
       if (data.num_turns !== null && data.num_turns !== undefined) metaParts.push(`${data.num_turns} turns`);
@@ -194,11 +220,42 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
+      const bodyText = await res.text();
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`HTTP ${res.status}: ${txt}`);
+        // Try to parse so we can pull message + stderr_lines out of FastAPI's
+        // {"detail": {...}} envelope. Fall back to raw text on parse failure.
+        let parsed = null;
+        try { parsed = JSON.parse(bodyText); } catch (_) {}
+        const err = new Error(`HTTP ${res.status}`);
+        err.parsed = parsed;
+        err.rawBody = bodyText;
+        throw err;
       }
-      return await res.json();
+      return JSON.parse(bodyText);
+    }
+
+    function renderError(e) {
+      resultCard.style.display = "block";
+      skillSummary.innerHTML = '<span class="error">Request failed</span>';
+      resultLinks.innerHTML = "";
+      resultMeta.textContent = "";
+
+      const detail = e.parsed && e.parsed.detail;
+      // FastAPI HTTPException nests under .detail; our _agent_failure puts
+      // {error, message, stderr} there. Surface those cleanly.
+      if (detail && typeof detail === "object") {
+        const lines = [];
+        if (detail.error) lines.push(`error: ${detail.error}`);
+        if (detail.message) lines.push(`message: ${detail.message}`);
+        resultJson.textContent = lines.join("\n");
+        showStderr(detail.stderr);
+      } else if (typeof detail === "string") {
+        resultJson.textContent = detail;
+        showStderr(null);
+      } else {
+        resultJson.textContent = e.rawBody || String(e.message || e);
+        showStderr(null);
+      }
     }
 
     async function handleRun(prompt) {
@@ -209,11 +266,7 @@
         const data = await runOnce(prompt);
         renderResult(data);
       } catch (e) {
-        resultCard.style.display = "block";
-        skillSummary.innerHTML = '<span class="error">Request failed</span>';
-        resultLinks.innerHTML = "";
-        resultJson.textContent = String(e.message || e);
-        resultMeta.textContent = "";
+        renderError(e);
       } finally {
         setRunning(false);
       }
