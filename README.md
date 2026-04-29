@@ -239,7 +239,9 @@ The three load-bearing AI moments are documented under [`prompts/`](./prompts/):
 - **[`prompts/01-framing-corrections.md`](./prompts/01-framing-corrections.md)** — the two user pushbacks that re-architected the system. Without them, I'd have built a parallel CI runner inside Zeabur and a Python-helpers folder hiding the AI's actual contribution. This is the most honest signal of "AI collaboration quality" in this repo.
 - **[`prompts/02-skill-creator-alignment.md`](./prompts/02-skill-creator-alignment.md)** — the WebFetch prompt against `anthropics/skills/skill-creator/SKILL.md` and the structural changes that came out of it (pushy descriptions, explicit JSON output template, per-skill `evals.json`).
 - **[`prompts/03-sdk-discovery.md`](./prompts/03-sdk-discovery.md)** — three fetches that established two facts I could not have correctly guessed: package name (`claude-agent-sdk`, not `anthropic`) and required path (`.claude/skills/`, not `skills/`). Both with quoted citations.
-- **[`prompts/04-lint-and-test-description-v1.md`](./prompts/04-lint-and-test-description-v1.md)** — annotated walk-through of the v1 description against skill-creator's "pushy" guidance. v2 (with measured precision delta from the eval harness) follows.
+- **[`prompts/04-lint-and-test-description-v1.md`](./prompts/04-lint-and-test-description-v1.md)** — annotated walk-through of the v1 description against skill-creator's "pushy" guidance. No v2 was produced — the eval scored trigger 100%, leaving nothing to revise against; the decision is documented in `06-eval-misses-analysis.md`.
+- **[`prompts/05-eval-prompt-design.md`](./prompts/05-eval-prompt-design.md)** — design rationale for the 16 entries in `eval/prompts.jsonl`: category distribution, why 9/4/3, which messy-prompt patterns from skill-creator I used and which I deliberately skipped.
+- **[`prompts/06-eval-misses-analysis.md`](./prompts/06-eval-misses-analysis.md)** — post-eval writeup: 100% trigger / 100% safety / 50% ambiguous, the two ambiguous misses, the trade-off introduced by the `NO_SKILL_FALLBACK_INSTRUCTION` wrapper, and why we accepted the trade rather than re-tuning.
 
 ---
 

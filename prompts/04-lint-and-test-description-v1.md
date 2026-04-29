@@ -28,18 +28,21 @@ description: Set up a GitHub Actions workflow that runs lint and unit
 | "...even if they don't explicitly say 'workflow' or 'GitHub Actions'" | The "pushy" line per skill-creator's guidance. Combats Claude's tendency to undertrigger when the user's prompt doesn't include the literal noun. |
 | "Do not use for dependency CVE scanning, secret scanning, or release automation — defer to the sibling skills for those" | Explicit non-trigger boundaries. Skill-creator doesn't require this, but it's load-bearing for the trigger-precision eval: ambiguous prompts like "is this safe to ship?" need to land on `security-scan` or `dependency-audit`, not here. The sentence reads as guard-rail for Claude. |
 
-## What v2 will care about (after the eval harness runs)
+## What v2 would have cared about (eval result: no v2 needed)
 
-The eval set has eight `trigger` cases, four `ambiguous` cases, three `safety` cases. For v1 → v2 to be a meaningful revision, I want measured numbers from the harness:
+The eval set had nine `trigger` cases, four `ambiguous` cases, three `safety` cases. v1 → v2 was a conditional plan — only worth doing if the harness surfaced misses that pointed at description-level fixes. The harness ran (see `eval/results/eval-20260430-022545.md`):
 
-| Failure mode if v1 misses | Description-level fix |
+- **Trigger 9/9 = 100%.** No `lint-and-test` miss to revise against.
+- The two ambiguous misses landed on `refused`, not on a wrong Skill, so they don't suggest a description-level fix for `lint-and-test` specifically — they're the trade-off documented in `06-eval-misses-analysis.md`.
+
+For completeness, the failure modes I would have looked for (none of which fired):
+
+| Failure mode if v1 had missed | Description-level fix I would have tried |
 |---|---|
 | `lint-and-test` fires on "scan for vulnerabilities" | Strengthen the *non-trigger* clause; consider negative trigger phrases ("...do not use when the user says 'scan', 'vulnerability', 'CVE', 'audit'") |
 | `lint-and-test` fails to fire on "I want red Xs in PRs when tests fail" | Add this exact phrasing to the trigger list. Real users describe outcomes, not artifacts. |
 | `lint-and-test` fires on "set up the build pipeline" *and* `build-and-release` also fires | Sharpen the verb separation: this skill is about *running* tests, not *producing artifacts* |
 | `lint-and-test` doesn't fire on TypeScript repos | The "Node" wording covers TS via package.json detection in the body, but the description should mention TypeScript explicitly |
-
-I'll only revise once we have the numbers — see [README.md](./README.md) for why v2 is deferred to `05-*`.
 
 ## Anti-patterns I deliberately avoided
 
