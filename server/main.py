@@ -184,6 +184,26 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+def _agent_failure(e: BaseException) -> HTTPException:
+    """Wrap any agent-side exception so the client sees the actual cause.
+
+    Without this, an unhandled exception inside `run_agent()` returns FastAPI's
+    generic 500 "Internal Server Error" body — opaque and forces a trip to
+    server logs. We surface the type + message instead. Tracebacks stay in
+    server logs (logged below); the client gets enough to decide what to do.
+    """
+    import logging
+    import traceback
+
+    logging.getLogger("uvicorn.error").error(
+        "agent run failed: %s\n%s", e, traceback.format_exc()
+    )
+    return HTTPException(
+        status_code=502,
+        detail={"error": e.__class__.__name__, "message": str(e)},
+    )
+
+
 @app.post("/run", response_model=RunResponse)
 async def run_endpoint(req: RunRequest) -> RunResponse:
     """Free-form prompt — Claude picks the Skill."""
@@ -201,6 +221,10 @@ async def run_endpoint(req: RunRequest) -> RunResponse:
             cost_usd=result.cost_usd,
             parse_error=result.parse_error,
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _agent_failure(e) from e
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -234,5 +258,9 @@ async def run_skill_endpoint(name: str, req: RunRequest) -> RunResponse:
             cost_usd=result.cost_usd,
             parse_error=result.parse_error,
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _agent_failure(e) from e
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

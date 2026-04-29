@@ -6,8 +6,13 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# git + gh CLI + curl/ca-certificates for gh's package source.
-# claude-agent-sdk bundles the Claude Code CLI itself, so no Node needed here.
+# Runtime deps:
+# - git, gh CLI: used by the Skills' Bash steps to push branches and open PRs
+# - Node.js (NodeSource 20.x): claude-agent-sdk's "bundled" CLI is JS that spawns
+#   under `node`. Without a Node runtime, query.initialize() exits 1 immediately
+#   and every /run call returns 502 with no usable stderr surfaced. Earlier
+#   commit messages (and an earlier comment here) said "no Node needed because
+#   bundled" — that was wrong; bundled means the JS payload, not the runtime.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         git \
@@ -19,8 +24,8 @@ RUN apt-get update \
  && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list \
- && apt-get update \
- && apt-get install -y --no-install-recommends gh \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends gh nodejs \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
