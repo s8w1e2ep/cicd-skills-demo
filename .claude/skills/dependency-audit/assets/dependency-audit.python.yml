@@ -23,6 +23,11 @@ jobs:
       - name: Audit requirements.txt
         if: hashFiles('requirements.txt') != ''
         run: pip-audit -r requirements.txt --strict
+      # Only audit pyproject.toml when requirements.txt is absent. A bare
+      # `pip-audit --strict` scans the entire runner env (including the
+      # system pip itself), which surfaces CVEs in pip that aren't
+      # actionable for this project. Pointing it at the project directory
+      # (`pip-audit . --strict`) restricts the scan to declared deps.
       - name: Audit pyproject.toml
-        if: hashFiles('pyproject.toml') != ''
-        run: pip-audit --strict
+        if: hashFiles('requirements.txt') == '' && hashFiles('pyproject.toml') != ''
+        run: pip-audit . --strict
