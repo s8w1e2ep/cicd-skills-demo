@@ -1,0 +1,28 @@
+name: dependency-audit
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pip-audit
+        run: pip install --upgrade pip-audit
+      - name: Audit requirements.txt
+        if: hashFiles('requirements.txt') != ''
+        run: pip-audit -r requirements.txt --strict
+      - name: Audit pyproject.toml
+        if: hashFiles('pyproject.toml') != ''
+        run: pip-audit --strict
