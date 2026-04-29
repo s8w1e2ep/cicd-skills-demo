@@ -170,12 +170,20 @@ def _agent_env() -> dict[str, str]:
 
 @app.get("/healthz")
 def healthz() -> dict[str, Any]:
-    """Liveness probe. Reports config presence, not validity."""
+    """Liveness probe. Reports config presence and the runtime uid.
+
+    The uid is reported because the bundled Claude Code CLI rejects
+    --dangerously-skip-permissions when launched as root (uid 0). If the
+    container ends up running as root despite the Dockerfile's `USER app`
+    directive (e.g. platform overrides it), every /run will fail with a
+    fast ProcessError; the uid here lets us confirm at a glance.
+    """
     return {
         "ok": True,
         "demo_repo_configured": bool(DEMO_REPO_URL),
         "github_token_configured": bool(GITHUB_TOKEN),
         "anthropic_key_configured": bool(ANTHROPIC_API_KEY),
+        "uid": os.getuid(),
     }
 
 

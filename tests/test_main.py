@@ -48,12 +48,11 @@ def test_healthz_reports_all_configured(configured):
     r = client.get("/healthz")
     assert r.status_code == 200
     body = r.json()
-    assert body == {
-        "ok": True,
-        "demo_repo_configured": True,
-        "github_token_configured": True,
-        "anthropic_key_configured": True,
-    }
+    assert body["ok"] is True
+    assert body["demo_repo_configured"] is True
+    assert body["github_token_configured"] is True
+    assert body["anthropic_key_configured"] is True
+    assert isinstance(body["uid"], int)
 
 
 def test_healthz_reports_unconfigured(unconfigured):
