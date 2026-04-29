@@ -39,6 +39,17 @@ COPY .claude ./.claude
 COPY server ./server
 COPY README.md* CLAUDE.md spec.md plan.md task.md ./
 
+# The bundled Claude Code CLI refuses to run with --dangerously-skip-permissions
+# under root ("cannot be used with root/sudo privileges for security reasons"),
+# which is what permission_mode="bypassPermissions" maps to. Containers default
+# to root, so we create an unprivileged user and switch to it. /app needs to be
+# owned by that user so per-request scratch dirs (created via tempfile under
+# /tmp by default, but file-writes during clone happen in /app's git config etc.)
+# don't hit EACCES.
+RUN useradd --create-home --shell /bin/bash app \
+ && chown -R app:app /app
+USER app
+
 # Honour $PORT if the platform injects one (Zeabur, Heroku-style); fall back to 8000.
 ENV PORT=8000
 EXPOSE 8000
