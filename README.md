@@ -205,11 +205,15 @@ The repo includes `Dockerfile` + `zeabur.json`. Connect the GitHub repo on Zeabu
 
 ```
 cicd-skills-demo/
-├── .claude/skills/        # 4 Skills (path required by claude-agent-sdk)
+├── .claude/
+│   ├── scripts/           # shared shell scripts the Skills call (idempotency
+│   │                      #   compare, branch switch, PR ensure, run list)
+│   └── skills/            # 4 Skills (path required by claude-agent-sdk)
 ├── server/
 │   ├── main.py            # FastAPI app + endpoints
 │   ├── agent_runner.py    # claude-agent-sdk wrapper, JSON extraction
 │   └── static/index.html  # single-page demo UI
+├── tests/                 # pytest unit tests for the server (run via `pytest`)
 ├── eval/
 │   ├── prompts.jsonl      # 16 NL prompts × {trigger, ambiguous, safety}
 │   ├── run_eval.py        # harness — calls /run, scores, writes report

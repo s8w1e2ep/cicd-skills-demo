@@ -26,16 +26,26 @@ All four push to a single shared branch `claude/ci-demo` on the demo repo, with 
 
 ```
 cicd-skills-demo/
-├── .claude/skills/               # one directory per Skill (path required by claude-agent-sdk)
-│   └── <name>/
-│       ├── SKILL.md              # frontmatter (pushy description) + body (< 500 lines)
-│       ├── assets/               # workflow YAML templates per language stack
-│       │   └── *.yml
-│       └── evals/
-│           └── evals.json        # per-skill execution evals
+├── .claude/
+│   ├── scripts/                  # shared shell scripts called from SKILL.md bodies
+│   │   ├── compare_yaml.sh       # semantic-equal YAML diff (the idempotency gate)
+│   │   ├── switch_to_demo_branch.sh
+│   │   ├── ensure_pr.sh          # prints existing or creates new PR; never duplicates
+│   │   └── list_workflow_runs.sh
+│   └── skills/                   # one directory per Skill (path required by claude-agent-sdk)
+│       └── <name>/
+│           ├── SKILL.md          # frontmatter (pushy description) + body (< 500 lines)
+│           ├── assets/           # workflow YAML templates per language stack
+│           │   └── *.yml
+│           └── evals/
+│               └── evals.json    # per-skill execution evals
 ├── server/
 │   ├── main.py                   # FastAPI: /run, /run/skill/{name}, /healthz, /
+│   ├── agent_runner.py           # claude-agent-sdk wrapper + JSON extraction
 │   └── static/index.html         # single-page demo UI
+├── tests/
+│   ├── test_agent_runner.py      # _extract_last_json edge cases
+│   └── test_main.py              # FastAPI TestClient: healthz, allowlist, env validation
 ├── eval/
 │   ├── prompts.jsonl             # global routing eval (NL prompts → expected_skill)
 │   ├── run_eval.py               # scores trigger precision per category
@@ -49,7 +59,7 @@ cicd-skills-demo/
 └── task.md                       # ordered task checklist
 ```
 
-Note: there is **no global `helpers/` or `scripts/`**. Skills do not share custom Python utilities — each Skill is self-contained markdown + assets. The only "code" Claude executes is via inline `python3 -c …` one-liners (e.g., for semantic YAML compare) and `gh` / `git` shell commands, both of which appear directly in SKILL.md.
+About `.claude/scripts/`: the four scripts encapsulate the git/gh operations every CI/CD Skill performs (semantic YAML compare, branch switch, PR ensure, run list). Centralising them in one place — rather than duplicating identical code in each `<skill>/scripts/` folder per the strict skill-creator idiom — means a fix to the idempotency / PR / branch logic touches one file, not four. SKILL.md bodies invoke them via `bash .claude/scripts/<name>.sh`.
 
 ## Conventions (reflecting skill-creator guidelines)
 
@@ -57,7 +67,7 @@ Note: there is **no global `helpers/` or `scripts/`**. Skills do not share custo
 - **Three-level progressive disclosure.** Metadata always in context (description), SKILL.md body loaded on trigger (< 500 lines), bundled resources (`assets/`) loaded on demand by Read.
 - **Imperative steps, explain why.** Steps are imperative ("Read X", "Run command Y"); for non-obvious requirements, explain the reasoning. Avoid excessive ALWAYS/NEVER caps.
 - **Templates are deterministic.** Files in `assets/` are static — no timestamps, no run-IDs, no random values. Same template → byte-identical output. Idempotency depends on this.
-- **Idempotency check is in SKILL.md, not in code.** Each Skill's body includes the exact `python3 -c "import yaml; …"` command for semantic comparison, with explicit handling for SAME (skip + return `no_change`) and DIFF (continue).
+- **Idempotency check is in SKILL.md, but the implementation is in `.claude/scripts/compare_yaml.sh`.** Each Skill's body invokes the shared script (`bash .claude/scripts/compare_yaml.sh existing.yml new.yml` → prints `SAME` or `DIFF`) with explicit handling for SAME (skip + return `no_change`) and DIFF (continue). The script being shared means a fix to the comparison logic propagates to all four Skills automatically.
 - **Output format is explicit.** Every SKILL.md ends with the JSON output schema and an instruction "Do not add prose after the JSON block." Server parser takes the LAST JSON block in stdout.
 - **Single shared branch.** All four Skills push to `claude/ci-demo`. Never per-Skill branches. Never force-push.
 - **Single persistent PR.** Created on first run, kept open thereafter, `gh pr create` is a no-op if it already exists.
@@ -69,7 +79,8 @@ Note: there is **no global `helpers/` or `scripts/`**. Skills do not share custo
 ## Things NOT to do
 
 - Don't add a fifth Skill until the four above are solid + evaluated.
-- Don't introduce a global `helpers/` or `scripts/` folder. Each Skill is self-contained.
+- Don't move the shared scripts back inline into SKILL.md — the duplication that creates is the original problem we solved by extracting them.
+- Don't introduce a project-root `helpers/` or `scripts/` folder. Skill-level shared scripts live under `.claude/scripts/`; anything else belongs in `server/`.
 - Don't include non-YAML files (`dependabot.yml`, `.semgrep.yml`, etc.) in v1.
 - Don't open fresh PRs per run; update the existing `claude/ci-demo` PR.
 - Don't force-push the demo branch.

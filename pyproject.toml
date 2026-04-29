@@ -13,6 +13,7 @@ dependencies = [
 dev = [
     "ruff>=0.7",
     "pytest>=8",
+    "httpx>=0.27",  # required by fastapi.testclient.TestClient
 ]
 
 [tool.ruff]
@@ -22,3 +23,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Without this, tests can't `from server.agent_runner import ...` since the
+# project isn't installed (we run uvicorn directly from source in the
+# Dockerfile, no `pip install -e .`). Adding the repo root to sys.path is
+# the lightest-touch fix.
+pythonpath = ["."]
