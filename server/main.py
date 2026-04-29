@@ -247,6 +247,69 @@ async def run_endpoint(req: RunRequest) -> RunResponse:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+@app.get("/debug/cli-binary")
+def debug_cli_binary() -> dict[str, Any]:
+    """Locate the bundled Claude Code CLI and run it with --version.
+
+    Goal: bypass the SDK's protocol layer entirely. If even `<cli> --version`
+    exits 1 with no stderr, we know the CLI binary itself is broken (e.g.
+    missing Node deps, bundled JS expects a runtime feature this Node lacks).
+    If --version works but `<cli> -p "..."` doesn't, we know the protocol
+    layer is the issue.
+    """
+    import subprocess
+    import sys
+
+    out: dict[str, Any] = {"python_executable": sys.executable}
+
+    # Find the bundled CLI. claude_agent_sdk ships JS under its package dir.
+    try:
+        import claude_agent_sdk  # type: ignore
+
+        sdk_dir = Path(claude_agent_sdk.__file__).parent
+        out["sdk_dir"] = str(sdk_dir)
+        # Walk the SDK dir looking for `cli.js` or similar entrypoints.
+        candidates = []
+        for path in sdk_dir.rglob("*"):
+            if path.is_file() and path.name in {"cli.js", "claude.js", "index.js", "claude"}:
+                candidates.append(str(path))
+        out["cli_candidates"] = candidates[:20]
+    except Exception as e:
+        out["sdk_locate_error"] = repr(e)
+
+    # Try to run `node --version` to confirm node itself works.
+    try:
+        node_v = subprocess.run(
+            ["node", "--version"], capture_output=True, text=True, timeout=10
+        )
+        out["node_version"] = node_v.stdout.strip()
+        out["node_stderr"] = node_v.stderr.strip()
+    except Exception as e:
+        out["node_run_error"] = repr(e)
+
+    # Try the most likely CLI entrypoint paths from npm-installed location.
+    for candidate in [
+        "/usr/local/bin/claude",
+        "/usr/bin/claude",
+        "/root/.npm-global/bin/claude",
+    ]:
+        if Path(candidate).exists():
+            out["claude_at_path"] = candidate
+            try:
+                v = subprocess.run(
+                    [candidate, "--version"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                out["claude_version_stdout"] = v.stdout
+                out["claude_version_stderr"] = v.stderr
+                out["claude_version_returncode"] = v.returncode
+            except Exception as e:
+                out["claude_version_error"] = repr(e)
+            break
+
+    return out
+
+
 @app.post("/debug/cli-probe")
 async def debug_cli_probe() -> dict[str, Any]:
     """Smallest possible agent invocation, with full stderr capture.
