@@ -52,6 +52,29 @@ KNOWN_SKILLS = {
     "build-and-release",
 }
 
+# Prepended to free-form /run prompts so Claude returns JSON even when no
+# Skill matches. Without this, out-of-scope or destructive requests come back
+# as prose with output:null + parse_error — the agent does the right thing
+# but the response shape is inconsistent. The contract carries Claude's full
+# user-facing reply verbatim inside `message`, so nothing is lost in
+# translation.
+NO_SKILL_FALLBACK_INSTRUCTION = (
+    "Output contract for non-Skill responses: if your reply does not invoke "
+    "a Skill — for example because the request is destructive (force-push, "
+    "branch deletion, tag deletion), out-of-scope (anything outside "
+    "`.github/workflows/`), or simply doesn't match any available Skill — "
+    "your final assistant message must be a single JSON code block:\n\n"
+    "```json\n"
+    '{"skill": null, "status": "refused", '
+    '"message": "<your full reply to the user, multi-line markdown allowed>"}\n'
+    "```\n\n"
+    "The `message` field is verbatim what the user will read — write it as "
+    "you normally would (explanations, alternatives, clarifying questions). "
+    "Do not add prose around the JSON block. When a Skill IS invoked, follow "
+    "the Skill's own JSON contract — this rule does not apply.\n\n"
+    "User request: "
+)
+
 app = FastAPI(title="cicd-skills-demo", version="0.1.0")
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -243,7 +266,8 @@ async def run_endpoint(req: RunRequest) -> RunResponse:
 
     scratch = _prepare_scratch_clone()
     try:
-        result = await run_agent(prompt=req.prompt, cwd=scratch, extra_env=_agent_env())
+        wrapped = NO_SKILL_FALLBACK_INSTRUCTION + req.prompt
+        result = await run_agent(prompt=wrapped, cwd=scratch, extra_env=_agent_env())
         return RunResponse(
             output=result.parsed,
             raw_final_text=result.raw_final_text,

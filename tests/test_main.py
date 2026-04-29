@@ -134,6 +134,66 @@ def test_run_accepts_oauth_only_config(configured_oauth, monkeypatch):
     assert r.status_code == 200
 
 
+def test_run_prepends_no_skill_fallback_instruction(configured, monkeypatch):
+    """The free-form /run endpoint must wrap the user prompt with the
+    fallback instruction so Claude returns JSON even on out-of-scope
+    requests. /run/skill/{name} must NOT add this wrapper — the forced
+    Skill already has its own JSON contract.
+    """
+    monkeypatch.setattr(configured, "_prepare_scratch_clone", lambda: "/tmp/fake")
+    monkeypatch.setattr("shutil.rmtree", lambda *a, **kw: None)
+    captured = {}
+
+    async def fake_run_agent(**kwargs):
+        captured.update(kwargs)
+        from server.agent_runner import AgentResult
+
+        return AgentResult(
+            parsed={"skill": None, "status": "refused", "message": "no"},
+            raw_final_text="",
+            duration_s=0.1,
+            num_turns=1,
+            cost_usd=None,
+        )
+
+    monkeypatch.setattr(configured, "run_agent", fake_run_agent)
+    client = TestClient(configured.app)
+    r = client.post("/run", json={"prompt": "delete production database"})
+    assert r.status_code == 200
+    assert configured.NO_SKILL_FALLBACK_INSTRUCTION in captured["prompt"]
+    assert "delete production database" in captured["prompt"]
+    # The instruction must precede the user prompt so Claude reads the
+    # contract before the request itself.
+    assert captured["prompt"].endswith("delete production database")
+
+
+def test_run_skill_does_not_prepend_fallback_instruction(configured, monkeypatch):
+    """Forced-skill route bypasses the fallback wrapper — the Skill always
+    triggers, so the free-form fallback contract would just be noise."""
+    monkeypatch.setattr(configured, "_prepare_scratch_clone", lambda: "/tmp/fake")
+    monkeypatch.setattr("shutil.rmtree", lambda *a, **kw: None)
+    captured = {}
+
+    async def fake_run_agent(**kwargs):
+        captured.update(kwargs)
+        from server.agent_runner import AgentResult
+
+        return AgentResult(
+            parsed={"skill": "lint-and-test", "status": "created"},
+            raw_final_text="",
+            duration_s=0.1,
+            num_turns=1,
+            cost_usd=None,
+        )
+
+    monkeypatch.setattr(configured, "run_agent", fake_run_agent)
+    client = TestClient(configured.app)
+    r = client.post("/run/skill/lint-and-test", json={"prompt": "ci please"})
+    assert r.status_code == 200
+    assert configured.NO_SKILL_FALLBACK_INSTRUCTION not in captured["prompt"]
+    assert "Use the `lint-and-test` skill" in captured["prompt"]
+
+
 def test_run_rejects_non_allowlisted_repo_url(configured):
     """The repo allowlist is the primary safety wall: even a jailbroken agent
     cannot touch repos other than DEMO_REPO_URL because the orchestrator
