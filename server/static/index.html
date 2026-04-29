@@ -177,25 +177,21 @@
     function renderResult(data) {
       resultCard.style.display = "block";
 
-      // When Claude responded but didn't trigger any Skill (e.g. the prompt was
-      // out-of-scope or destructive — none of the 4 Skills' descriptions
-      // matched), `output` is null and `raw_final_text` holds Claude's prose
-      // reply. Treat that as a first-class "no skill matched" outcome instead
-      // of labelling it a parse error.
+      const out = data.output || {};
+      // The "no Skill matched" output shape, produced by the wrapper
+      // instruction in server/main.py: skill is null, status is "refused",
+      // and `message` carries Claude's full prose reply verbatim.
       const noSkillMatched =
-        !data.output &&
-        data.raw_final_text &&
-        data.parse_error &&
-        data.parse_error.indexOf("no JSON object found") !== -1;
+        out && out.skill === null && out.status === "refused" && out.message;
 
       if (noSkillMatched) {
         skillSummary.innerHTML =
           '<span class="skill-badge refused">no skill matched</span>' +
           ' &middot; <span class="meta">Claude declined to invoke a Skill. See its reply below.</span>';
         resultLinks.innerHTML = "";
-        resultJson.textContent = data.raw_final_text;
+        // Show the message verbatim — that's the actual user-facing reply.
+        resultJson.textContent = out.message;
       } else {
-        const out = data.output || {};
         const status = out.status || (out.refused ? "refused" : "?");
         const skill = out.skill || "(parse error)";
 
@@ -225,11 +221,7 @@
       const metaParts = [`took ${data.duration_s.toFixed(1)}s`];
       if (data.num_turns !== null && data.num_turns !== undefined) metaParts.push(`${data.num_turns} turns`);
       if (data.cost_usd !== null && data.cost_usd !== undefined) metaParts.push(`$${data.cost_usd.toFixed(3)}`);
-      // Only flag parse_error when it actually represents broken JSON, not the
-      // graceful "no Skill matched" path handled above.
-      if (data.parse_error && !noSkillMatched) {
-        metaParts.push(`<span class="error">parse error: ${escapeHtml(data.parse_error)}</span>`);
-      }
+      if (data.parse_error) metaParts.push(`<span class="error">parse error: ${escapeHtml(data.parse_error)}</span>`);
       resultMeta.innerHTML = metaParts.join(" &middot; ");
     }
 
