@@ -1,0 +1,24 @@
+[project]
+name = "task1-cicd-skills"
+version = "0.1.0"
+description = "GitHub CI/CD as Claude Skills — demo service"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "claude-agent-sdk>=0.0.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.7",
+    "pytest>=8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]

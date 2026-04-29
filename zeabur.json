@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.zeabur.app/template.json",
+  "build": {
+    "type": "dockerfile"
+  },
+  "ports": [
+    {
+      "id": "web",
+      "port": 8000,
+      "type": "HTTP"
+    }
+  ],
+  "healthcheck": {
+    "type": "http",
+    "path": "/healthz",
+    "port": 8000
+  },
+  "env": {
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for the Agent SDK",
+      "required": true
+    },
+    "GITHUB_TOKEN": {
+      "description": "Fine-grained GitHub PAT scoped to the demo repo with Contents:write + Workflows:write",
+      "required": true
+    },
+    "DEMO_REPO_URL": {
+      "description": "HTTPS URL of the demo repo, e.g. https://github.com/<user>/task1-cicd-skills",
+      "required": true
+    },
+    "GIT_USER_NAME": {
+      "description": "Committer name used inside the scratch clone (optional)",
+      "default": "claude-skills-bot",
+      "required": false
+    },
+    "GIT_USER_EMAIL": {
+      "description": "Committer email used inside the scratch clone (optional)",
+      "default": "claude-skills-bot@users.noreply.github.com",
+      "required": false
+    }
+  }
+}

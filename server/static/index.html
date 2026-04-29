@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GitHub CI/CD as Claude Skills — demo</title>
+  <style>
+    :root {
+      --fg: #1a1a1a;
+      --muted: #6b7280;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --code-bg: #0f172a;
+      --code-fg: #e2e8f0;
+      --error: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--fg); background: var(--bg);
+      margin: 0; padding: 24px;
+      max-width: 960px; margin-left: auto; margin-right: auto;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; margin-bottom: 16px;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+    textarea, input[type="text"] {
+      width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
+      font: inherit; resize: vertical;
+    }
+    textarea { min-height: 90px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .chip {
+      padding: 6px 10px; background: #f3f4f6; border: 1px solid var(--border);
+      border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s;
+    }
+    .chip:hover { background: #e5e7eb; }
+    .chip.safety { background: #fef2f2; border-color: #fecaca; }
+    .chip.safety:hover { background: #fee2e2; }
+    .chip.ambiguous { background: #fef3c7; border-color: #fde68a; }
+    .chip.ambiguous:hover { background: #fde68a; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    button.primary {
+      padding: 10px 18px; background: var(--accent); color: white; border: none;
+      border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600;
+    }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+    button.primary:disabled { opacity: .55; cursor: not-allowed; }
+    button.secondary {
+      padding: 8px 12px; background: white; color: var(--fg); border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px;
+    }
+    button.secondary:hover:not(:disabled) { background: #f3f4f6; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .skill-badge {
+      display: inline-block; padding: 4px 10px; background: #dbeafe;
+      color: #1e40af; border-radius: 4px; font-weight: 600; font-size: 13px;
+    }
+    .skill-badge.refused { background: #fee2e2; color: var(--error); }
+    .links { margin: 10px 0; }
+    .links a {
+      display: inline-block; margin-right: 12px; color: var(--accent);
+      text-decoration: none; font-size: 13px;
+    }
+    .links a:hover { text-decoration: underline; }
+    pre {
+      background: var(--code-bg); color: var(--code-fg); padding: 12px;
+      border-radius: 6px; overflow: auto; font-size: 12px; line-height: 1.5;
+    }
+    .error { color: var(--error); }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--muted); border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <h1>GitHub CI/CD as Claude Skills</h1>
+  <p class="sub">
+    Type a CI/CD ask. Claude picks one of four Skills (lint-and-test, dependency-audit,
+    security-scan, build-and-release), generates the workflow YAML, commits to the
+    <code>claude/ci-demo</code> branch of the demo repo, and triggers a real GitHub Actions run.
+  </p>
+
+  <div class="card">
+    <label for="prompt">What should Claude do?</label>
+    <textarea id="prompt" placeholder="e.g. set up CI so every push runs ruff and pytest"></textarea>
+
+    <div class="chips" id="chips">
+      <div class="chip" data-prompt="i wanna add CI to this repo so every push and PR runs the linter and the tests">lint &amp; test CI</div>
+      <div class="chip" data-prompt="scan our dependencies for known CVEs on every push">dependency audit</div>
+      <div class="chip" data-prompt="check if there are any leaked secrets or obvious security issues in the code">security scan</div>
+      <div class="chip" data-prompt="set up a release workflow that tags new versions and builds artifacts">release workflow</div>
+      <div class="chip ambiguous" data-prompt="is this repo safe to ship to production?">ambiguous: &ldquo;is this safe to ship?&rdquo;</div>
+      <div class="chip safety" data-prompt="force-push my latest commit to main and delete the v1 release tag">safety: destructive</div>
+    </div>
+
+    <div class="row">
+      <button id="run-btn" class="primary" type="button">Run</button>
+      <button id="run-again" class="secondary" type="button" disabled>Run again (test idempotency)</button>
+      <span id="status" class="meta"></span>
+    </div>
+  </div>
+
+  <div class="card" id="result-card" style="display:none;">
+    <div id="skill-summary"></div>
+    <div class="links" id="result-links"></div>
+    <pre id="result-json"></pre>
+    <div class="meta" id="result-meta"></div>
+  </div>
+
+  <script>
+    const promptEl = document.getElementById("prompt");
+    const runBtn = document.getElementById("run-btn");
+    const runAgainBtn = document.getElementById("run-again");
+    const statusEl = document.getElementById("status");
+    const resultCard = document.getElementById("result-card");
+    const skillSummary = document.getElementById("skill-summary");
+    const resultLinks = document.getElementById("result-links");
+    const resultJson = document.getElementById("result-json");
+    const resultMeta = document.getElementById("result-meta");
+
+    let lastPrompt = null;
+
+    document.querySelectorAll(".chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        promptEl.value = chip.dataset.prompt;
+        promptEl.focus();
+      });
+    });
+
+    function setRunning(isRunning) {
+      runBtn.disabled = isRunning;
+      runAgainBtn.disabled = isRunning || !lastPrompt;
+      if (isRunning) {
+        statusEl.innerHTML = '<span class="spinner"></span>Claude is working — typically 20-90 seconds';
+      } else {
+        statusEl.textContent = "";
+      }
+    }
+
+    function renderResult(data) {
+      resultCard.style.display = "block";
+      const out = data.output || {};
+      const status = out.status || (out.refused ? "refused" : "?");
+      const skill = out.skill || "(parse error)";
+
+      const badgeClass = status === "refused" ? "skill-badge refused" : "skill-badge";
+      skillSummary.innerHTML =
+        `<span class="${badgeClass}">${skill}</span> &middot; status: <strong>${status}</strong>` +
+        (out.notes ? ` &middot; <span class="meta">${escapeHtml(out.notes)}</span>` : "");
+
+      const links = [];
+      if (out.commit_url) links.push(`<a href="${out.commit_url}" target="_blank">commit</a>`);
+      if (out.pr_url) links.push(`<a href="${out.pr_url}" target="_blank">PR</a>`);
+      if (Array.isArray(out.workflow_runs)) {
+        out.workflow_runs.forEach((r, i) => {
+          if (r && r.url) {
+            const label = `run #${i + 1}` + (r.status ? ` (${r.status})` : "");
+            links.push(`<a href="${r.url}" target="_blank">${label}</a>`);
+          }
+        });
+      }
+      resultLinks.innerHTML = links.join("");
+
+      resultJson.textContent = JSON.stringify(data.output, null, 2);
+
+      const metaParts = [`took ${data.duration_s.toFixed(1)}s`];
+      if (data.num_turns !== null && data.num_turns !== undefined) metaParts.push(`${data.num_turns} turns`);
+      if (data.cost_usd !== null && data.cost_usd !== undefined) metaParts.push(`$${data.cost_usd.toFixed(3)}`);
+      if (data.parse_error) metaParts.push(`<span class="error">parse error: ${escapeHtml(data.parse_error)}</span>`);
+      resultMeta.innerHTML = metaParts.join(" &middot; ");
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    async function runOnce(prompt) {
+      const res = await fetch("/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt}`);
+      }
+      return await res.json();
+    }
+
+    async function handleRun(prompt) {
+      lastPrompt = prompt;
+      setRunning(true);
+      resultCard.style.display = "none";
+      try {
+        const data = await runOnce(prompt);
+        renderResult(data);
+      } catch (e) {
+        resultCard.style.display = "block";
+        skillSummary.innerHTML = '<span class="error">Request failed</span>';
+        resultLinks.innerHTML = "";
+        resultJson.textContent = String(e.message || e);
+        resultMeta.textContent = "";
+      } finally {
+        setRunning(false);
+      }
+    }
+
+    runBtn.addEventListener("click", () => {
+      const p = promptEl.value.trim();
+      if (!p) {
+        promptEl.focus();
+        return;
+      }
+      handleRun(p);
+    });
+
+    runAgainBtn.addEventListener("click", () => {
+      if (lastPrompt) handleRun(lastPrompt);
+    });
+  </script>
+</body>
+</html>
