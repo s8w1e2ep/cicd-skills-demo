@@ -34,6 +34,8 @@ COPY .claude ./.claude
 COPY server ./server
 COPY README.md* CLAUDE.md spec.md plan.md task.md ./
 
+# Honour $PORT if the platform injects one (Zeabur, Heroku-style); fall back to 8000.
+ENV PORT=8000
 EXPOSE 8000
 
-CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn server.main:app --host 0.0.0.0 --port ${PORT}"]
