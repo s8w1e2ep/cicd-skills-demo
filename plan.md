@@ -11,9 +11,10 @@
        ┌────────────────────────────────────────────┐
        │  FastAPI (server/main.py)                  │
        │  ─ clone demo repo → /tmp/work-<uuid>      │
-       │  ─ launch Claude Agent SDK                 │
-       │      • CWD = scratch dir                   │
-       │      • skills/ loaded                      │
+       │  ─ launch claude-agent-sdk query()         │
+       │      • cwd = scratch dir                   │
+       │      • setting_sources=["project"] loads   │
+       │        <cwd>/.claude/skills/               │
        │      • prompt forwarded                    │
        │  ─ wait for completion (90s timeout)       │
        │  ─ parse final JSON code block from output │
@@ -48,12 +49,12 @@ Key choice: **Skills are pure markdown + assets, no custom helpers.** Claude fol
 
 ## 2. Components
 
-### 2.1 Skills (`skills/<name>/`)
+### 2.1 Skills (`.claude/skills/<name>/`)
 
-Per the official skill-creator structure:
+Per official skill-creator + claude-agent-sdk:
 
 ```
-skills/<name>/
+.claude/skills/<name>/
 ├── SKILL.md             # < 500 lines, frontmatter + body
 ├── assets/              # workflow YAML templates per language stack
 │   ├── <name>.node.yml
@@ -61,6 +62,8 @@ skills/<name>/
 └── evals/
     └── evals.json
 ```
+
+Path is fixed by SDK discovery: `setting_sources=["project"]` loads from `<cwd>/.claude/skills/`. Demo repo is this project repo, so the scratch clone naturally has `.claude/skills/`.
 
 `SKILL.md` body sections:
 
@@ -78,7 +81,7 @@ Descriptions follow skill-creator's "pushy" guidance — include trigger phrases
   1. Reject if `repo_url` ≠ `DEMO_REPO_URL` env (allowlist enforced server-side).
   2. `git clone --depth=20 $DEMO_REPO_URL /tmp/work-<uuid>` (depth > 1 so we can see existing branches).
   3. `cd /tmp/work-<uuid>` and `git fetch origin claude/ci-demo` (best-effort; may not exist).
-  4. Spawn Claude Agent SDK subprocess: CWD = scratch, skills/ loaded as the agent's skill set, prompt forwarded.
+  4. Invoke `claude_agent_sdk.query()` with `cwd=<scratch>`, `setting_sources=["project"]` (loads `.claude/skills/` from cwd), `allowed_tools=["Skill","Read","Write","Edit","Bash","Grep","Glob"]`, prompt forwarded.
   5. 90s hard timeout.
   6. Parse the last JSON code block from stdout.
   7. Validate against the output schema.

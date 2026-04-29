@@ -26,7 +26,7 @@ All four push to a single shared branch `claude/ci-demo` on the demo repo, with 
 
 ```
 task1-cicd-skills/
-├── skills/                       # one directory per Skill (idiomatic per skill-creator)
+├── .claude/skills/               # one directory per Skill (path required by claude-agent-sdk)
 │   └── <name>/
 │       ├── SKILL.md              # frontmatter (pushy description) + body (< 500 lines)
 │       ├── assets/               # workflow YAML templates per language stack

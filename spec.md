@@ -49,16 +49,18 @@ Each Skill produces exactly one file under `.github/workflows/` of the current r
 | `security-scan` | `security-scan.yml` | Run gitleaks + semgrep (default ruleset); upload SARIF. |
 | `build-and-release` | `release.yml` | Tag-on-push semver workflow; build artifact; create GitHub Release. |
 
-### 4.2 Skill folder structure (per official skill-creator)
+### 4.2 Skill folder structure (per official skill-creator + claude-agent-sdk)
 
 ```
-skills/<name>/
+.claude/skills/<name>/
 ├── SKILL.md             # required: frontmatter + body (< 500 lines)
 ├── assets/              # workflow YAML templates, one per language stack
 │   └── *.yml
 └── evals/
     └── evals.json       # per-skill evals (skill execution correctness)
 ```
+
+The `.claude/skills/` path is required by `claude-agent-sdk` — when `setting_sources=["project"]` is set, the SDK auto-discovers Skills under `<cwd>/.claude/skills/`.
 
 `scripts/` and `references/` are not used in v1 — SKILL.md stays compact, and the YAML semantic-compare we need is a one-line `python3 -c …` invocation that fits inline in the body.
 
@@ -123,7 +125,7 @@ Each SKILL.md includes a step like:
 
 ### 4.8 Demo API
 
-- `POST /run` — body `{prompt: str}`. Server clones demo repo to scratch, invokes Claude Agent SDK with skills/ loaded, prompt passed; parses final JSON block; returns it plus duration.
+- `POST /run` — body `{prompt: str}`. Server shallow-clones demo repo to scratch, invokes `claude-agent-sdk` with `cwd=<scratch>` and `setting_sources=["project"]` so Skills load from `<scratch>/.claude/skills/`; parses the final JSON block from the last assistant text; returns it plus duration.
 - `POST /run/skill/{name}` — bypass routing; force a specific Skill (for eval harness + debugging).
 - `GET /healthz` — liveness.
 - `GET /` — single-page demo UI.
@@ -154,7 +156,7 @@ Two layers:
 
 ### 5.2 Per-skill evals
 
-Each `skills/<name>/evals/evals.json` follows the official schema:
+Each `.claude/skills/<name>/evals/evals.json` follows the official schema:
 
 ```json
 {

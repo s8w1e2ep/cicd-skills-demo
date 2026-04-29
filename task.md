@@ -19,10 +19,10 @@ Each phase ends in a **commit** with an intent-revealing message. The grader wil
 
 Goal: prove the loop works for `lint-and-test` before scaling.
 
-- [ ] `skills/lint-and-test/SKILL.md` — frontmatter (pushy description) + body sections (when to use, steps, idempotency check, output format)
-- [ ] `skills/lint-and-test/assets/lint-and-test.node.yml` — static template
-- [ ] `skills/lint-and-test/assets/lint-and-test.python.yml` — static template
-- [ ] `skills/lint-and-test/evals/evals.json` — 2 entries (happy + idempotency)
+- [x] `.claude/skills/lint-and-test/SKILL.md` — frontmatter (pushy description) + body sections (when to use, steps, idempotency check, output format)
+- [x] `.claude/skills/lint-and-test/assets/lint-and-test.node.yml` — static template
+- [x] `.claude/skills/lint-and-test/assets/lint-and-test.python.yml` — static template
+- [x] `.claude/skills/lint-and-test/evals/evals.json` — 2 entries (happy + idempotency)
 - [ ] `server/main.py` — `POST /run/skill/lint-and-test` (skip agent routing for now): clones demo repo, launches Claude Agent SDK subprocess with `/forced` skill = lint-and-test, parses final JSON block, returns
 - [ ] `Dockerfile` builds locally; `gh` and `git` work inside
 - [ ] Manually invoke against demo repo. Confirm:
@@ -37,9 +37,9 @@ Goal: prove the loop works for `lint-and-test` before scaling.
 
 For each Skill: SKILL.md + assets + evals/evals.json (≥ 2 entries).
 
-- [ ] `skills/dependency-audit/` (npm audit + pip-audit; SARIF upload)
-- [ ] `skills/security-scan/` (gitleaks + semgrep)
-- [ ] `skills/build-and-release/` (tag-on-push semver workflow)
+- [ ] `.claude/skills/dependency-audit/` (npm audit + pip-audit; SARIF upload)
+- [ ] `.claude/skills/security-scan/` (gitleaks + semgrep)
+- [ ] `.claude/skills/build-and-release/` (tag-on-push semver workflow)
 - [ ] Wire `/run/skill/{name}` to dispatch by name
 - [ ] Smoke test each Skill against demo repo; verify each one:
   - creates its workflow YAML on `claude/ci-demo`
