@@ -7,7 +7,7 @@ description: Set up a GitHub Actions workflow that performs static security anal
 
 ## What this skill does
 
-Writes (or updates) `.github/workflows/security-scan.yml` in the current repo, commits it to `claude/ci-demo`, and ensures a single PR to the default branch exists. The workflow runs gitleaks (secret detection across the full git history) and semgrep (SAST with the auto rule pack) and uploads SARIF to GitHub's Security tab. This skill provisions the workflow only — actual scanning happens on the GitHub Actions runner.
+Writes (or updates) `.github/workflows/security-scan.yml` in the current repo, commits it to the demo branch, and ensures a single PR to the default branch exists. The demo branch defaults to `claude/ci-demo` but the orchestrator can override it via the `DEMO_BRANCH` env var. The workflow runs gitleaks (secret detection across the full git history) and semgrep (SAST with the auto rule pack) and uploads SARIF to GitHub's Security tab. This skill provisions the workflow only — actual scanning happens on the GitHub Actions runner.
 
 The workflow is language-agnostic — semgrep auto-detects what's in the repo, gitleaks pattern-matches independent of language. There is no per-stack template branching here.
 
@@ -16,7 +16,7 @@ The workflow is language-agnostic — semgrep auto-detects what's in the repo, g
 The git/gh operations live under this Skill's own `scripts/` directory. The Skill body invokes them rather than inlining shell commands. Available:
 
 - `.claude/skills/security-scan/scripts/compare_yaml.sh <a> <b>` — semantic-equal compare; prints `SAME` or `DIFF`
-- `.claude/skills/security-scan/scripts/switch_to_demo_branch.sh` — fetch + checkout `claude/ci-demo`, fork from HEAD if remote missing
+- `.claude/skills/security-scan/scripts/switch_to_demo_branch.sh` — fetch + checkout the demo branch (`$DEMO_BRANCH`, default `claude/ci-demo`), fork from HEAD if remote missing
 - `.claude/skills/security-scan/scripts/ensure_pr.sh` — print existing PR URL, or create a new PR if none exists
 - `.claude/skills/security-scan/scripts/list_workflow_runs.sh <filename.yml>` — JSON list of last 5 runs for one workflow
 
@@ -50,12 +50,12 @@ The git/gh operations live under this Skill's own `scripts/` directory. The Skil
 
 6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/security-scan.yml`.
 
-7. **Commit and push.**
+7. **Commit and push.** Push to whatever branch the previous step checked out — use `git push -u origin "$(git branch --show-current)"` so per-pipeline branch names work without hardcoding.
 
    ```bash
    git add .github/workflows/security-scan.yml
    git commit -m "ci: add security-scan workflow via security-scan skill"
-   git push -u origin claude/ci-demo
+   git push -u origin "$(git branch --show-current)"
    ```
 
 8. **Ensure the PR exists.**
@@ -82,7 +82,7 @@ After completing the steps (or on early exit from step 1 or step 4), emit exactl
 {
   "skill": "security-scan",
   "status": "created" | "updated" | "no_change" | "refused",
-  "branch": "claude/ci-demo",
+  "branch": "<the actual branch you committed to — get it from `git branch --show-current` after the switch script runs; do NOT hardcode 'claude/ci-demo'>",
   "workflow_path": ".github/workflows/security-scan.yml",
   "commit_url": "https://github.com/<owner>/<repo>/commit/<sha>" | null,
   "pr_url": "https://github.com/<owner>/<repo>/pull/<n>" | null,
