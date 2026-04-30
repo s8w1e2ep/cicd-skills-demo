@@ -6,301 +6,440 @@
   <title>GitHub CI/CD as Claude Skills — demo</title>
   <style>
     :root {
-      --fg: #1a1a1a;
-      --muted: #6b7280;
-      --bg: #fafafa;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --bg: #f8fafc;
       --card: #ffffff;
-      --border: #e5e7eb;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
       --accent: #2563eb;
       --accent-hover: #1d4ed8;
       --code-bg: #0f172a;
       --code-fg: #e2e8f0;
       --error: #b91c1c;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --success: #15803d;
+      --success-bg: #dcfce7;
+      --success-border: #bbf7d0;
+      --warning: #b45309;
+      --warning-bg: #fef3c7;
+      --warning-border: #fde68a;
+      --queued: #94a3b8;
+      --queued-bg: #f1f5f9;
     }
     * { box-sizing: border-box; }
+    html, body { background: var(--bg); }
     body {
-      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      color: var(--fg); background: var(--bg);
-      margin: 0; padding: 24px;
-      max-width: 960px; margin-left: auto; margin-right: auto;
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang TC", "Noto Sans TC", sans-serif;
+      color: var(--fg);
+      margin: 0;
+      padding: 32px 24px 64px;
+      max-width: 1100px;
+      margin-inline: auto;
     }
-    h1 { font-size: 22px; margin: 0 0 4px; }
-    .sub { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
-    .card {
-      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-      padding: 16px; margin-bottom: 16px;
+    header { margin-bottom: 24px; }
+    header h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -0.02em; }
+    header p { color: var(--muted); margin: 0; max-width: 760px; line-height: 1.6; }
+
+    .action {
+      display: flex; align-items: center; gap: 16px;
+      padding: 24px;
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      color: white;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
     }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
-    textarea, input[type="text"] {
-      width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px;
-      font: inherit; resize: vertical;
-    }
-    textarea { min-height: 90px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-    .chip {
-      padding: 6px 10px; background: #f3f4f6; border: 1px solid var(--border);
-      border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s;
-    }
-    .chip:hover { background: #e5e7eb; }
-    .chip.safety { background: #fef2f2; border-color: #fecaca; }
-    .chip.safety:hover { background: #fee2e2; }
-    .chip.ambiguous { background: #fef3c7; border-color: #fde68a; }
-    .chip.ambiguous:hover { background: #fde68a; }
-    .row { display: flex; gap: 8px; align-items: center; }
+    .action-text { flex: 1; min-width: 0; }
+    .action-title { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+    .action-sub { font-size: 13px; opacity: 0.85; }
     button.primary {
-      padding: 10px 18px; background: var(--accent); color: white; border: none;
-      border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600;
+      padding: 14px 24px;
+      background: white;
+      color: var(--accent);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      transition: transform 0.1s, box-shadow 0.15s;
+      flex-shrink: 0;
     }
-    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
-    button.primary:disabled { opacity: .55; cursor: not-allowed; }
-    button.secondary {
-      padding: 8px 12px; background: white; color: var(--fg); border: 1px solid var(--border);
-      border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px;
+    button.primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
-    button.secondary:hover:not(:disabled) { background: #f3f4f6; }
-    .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
-    .skill-badge {
-      display: inline-block; padding: 4px 10px; background: #dbeafe;
-      color: #1e40af; border-radius: 4px; font-weight: 600; font-size: 13px;
+    button.primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .pipeline-info {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px 20px; margin-bottom: 16px;
     }
-    .skill-badge.refused { background: #fee2e2; color: var(--error); }
-    .links { margin: 10px 0; }
-    .links a {
-      display: inline-block; margin-right: 12px; color: var(--accent);
-      text-decoration: none; font-size: 13px;
+    .info-row { display: flex; align-items: center; gap: 12px; min-height: 22px; }
+    .info-row + .info-row { margin-top: 8px; }
+    .info-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-weight: 600; width: 64px; flex-shrink: 0;
     }
-    .links a:hover { text-decoration: underline; }
-    pre {
-      background: var(--code-bg); color: var(--code-fg); padding: 12px;
-      border-radius: 6px; overflow: auto; font-size: 12px; line-height: 1.5;
-      max-height: 360px; white-space: pre-wrap; word-break: break-word;
+    .info-value {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+      font-size: 13px; color: var(--fg); word-break: break-all;
     }
-    pre.stderr {
-      background: #1f1414; color: #fecaca; max-height: 240px;
+    .info-value a { color: var(--accent); text-decoration: none; }
+    .info-value a:hover { text-decoration: underline; }
+    .info-value.muted { color: var(--muted); font-family: inherit; font-size: 13px; }
+
+    .pipeline-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--muted); margin-bottom: 12px;
     }
-    .stderr-label {
-      font-size: 12px; color: var(--muted); margin: 12px 0 4px;
-      text-transform: uppercase; letter-spacing: 0.05em;
+    .pipeline-status .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--queued);
     }
-    .error { color: var(--error); }
+    .pipeline-status.running .dot { background: var(--warning); animation: pulse 1.4s ease-in-out infinite; }
+    .pipeline-status.done .dot { background: var(--success); }
+    .pipeline-status.failed .dot { background: var(--error); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      min-height: 180px;
+    }
+    .card.running { border-color: var(--warning); box-shadow: 0 0 0 3px var(--warning-bg); }
+    .card.done { border-color: var(--success-border); }
+    .card.failed { border-color: var(--error-border); }
+
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-weight: 600; font-size: 14px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+    }
+    .card-status {
+      padding: 3px 10px; border-radius: 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+      background: var(--queued-bg); color: var(--queued);
+      display: inline-flex; align-items: center; gap: 6px;
+      white-space: nowrap;
+    }
+    .card.running .card-status { background: var(--warning-bg); color: var(--warning); }
+    .card.done .card-status { background: var(--success-bg); color: var(--success); }
+    .card.failed .card-status { background: var(--error-bg); color: var(--error); }
+
     .spinner {
-      display: inline-block; width: 14px; height: 14px;
-      border: 2px solid var(--muted); border-top-color: transparent;
+      display: inline-block; width: 10px; height: 10px;
+      border: 2px solid currentColor; border-top-color: transparent;
       border-radius: 50%; animation: spin 0.7s linear infinite;
-      vertical-align: middle; margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .card-output-status {
+      font-size: 13px; font-weight: 500;
+    }
+    .card-notes {
+      font-size: 12px; color: var(--muted); line-height: 1.45;
+    }
+    .card-links {
+      display: flex; flex-wrap: wrap; gap: 8px 12px;
+      font-size: 12px;
+    }
+    .card-links a {
+      color: var(--accent); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .card-links a:hover { text-decoration: underline; }
+    .card-links a::before { content: "↗"; opacity: 0.6; font-size: 11px; }
+    .card-error {
+      background: var(--error-bg); color: var(--error); padding: 10px;
+      border-radius: 6px; font-size: 12px; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 160px; overflow: auto;
+    }
+    .card-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: auto; padding-top: 8px;
+      font-size: 11px; color: var(--muted);
+    }
+    .card-empty {
+      color: var(--muted); font-size: 12px; font-style: italic;
+    }
+
+    .placeholder {
+      background: var(--card); border: 1px dashed var(--border-strong);
+      border-radius: 10px; padding: 32px; text-align: center;
+      color: var(--muted); font-size: 14px;
+    }
   </style>
 </head>
 <body>
-  <h1>GitHub CI/CD as Claude Skills</h1>
-  <p class="sub">
-    Type a CI/CD ask. Claude picks one of four Skills (lint-and-test, dependency-audit,
-    security-scan, build-and-release), generates the workflow YAML, commits to the
-    <code>claude/ci-demo</code> branch of the demo repo, and triggers a real GitHub Actions run.
-  </p>
+  <header>
+    <h1>GitHub CI/CD as Claude Skills</h1>
+    <p>
+      Click the button to spin up a complete CI/CD pipeline. Claude triggers all four Skills
+      sequentially against a freshly-minted branch — each Skill writes its workflow YAML,
+      commits it, opens (or reuses) a PR, and reports the GitHub Actions run that just started.
+      Progress streams back live.
+    </p>
+  </header>
 
-  <div class="card">
-    <label for="prompt">What should Claude do?</label>
-    <textarea id="prompt" placeholder="e.g. set up CI so every push runs ruff and pytest"></textarea>
-
-    <div class="chips" id="chips">
-      <div class="chip" data-prompt="i wanna add CI to this repo so every push and PR runs the linter and the tests">lint &amp; test CI</div>
-      <div class="chip" data-prompt="scan our dependencies for known CVEs on every push">dependency audit</div>
-      <div class="chip" data-prompt="check if there are any leaked secrets or obvious security issues in the code">security scan</div>
-      <div class="chip" data-prompt="set up a release workflow that tags new versions and builds artifacts">release workflow</div>
-      <div class="chip ambiguous" data-prompt="is this repo safe to ship to production?">ambiguous: &ldquo;is this safe to ship?&rdquo;</div>
-      <div class="chip safety" data-prompt="force-push my latest commit to main and delete the v1 release tag">safety: destructive</div>
+  <div class="action">
+    <div class="action-text">
+      <div class="action-title">Run full CI/CD pipeline</div>
+      <div class="action-sub">Each click mints a fresh branch (<code style="background: rgba(255,255,255,0.15); padding: 1px 6px; border-radius: 4px; font-size: 12px;">demo-YYYYMMDD-HHMMSS-&lt;hash&gt;</code>) and chains all four Skills against it. Takes ~5 minutes.</div>
     </div>
+    <button id="run-btn" class="primary" type="button">Run pipeline</button>
+  </div>
 
-    <div class="row">
-      <button id="run-btn" class="primary" type="button">Run</button>
-      <button id="run-again" class="secondary" type="button" disabled>Run again (test idempotency)</button>
-      <span id="status" class="meta"></span>
+  <div id="placeholder" class="placeholder">
+    Click the button above to start a pipeline run. You will see a card per Skill update in real time.
+  </div>
+
+  <div id="pipeline-status" class="pipeline-status" hidden>
+    <span class="dot"></span>
+    <span id="pipeline-status-text"></span>
+  </div>
+
+  <div id="pipeline-info" class="pipeline-info" hidden>
+    <div class="info-row">
+      <span class="info-label">Branch</span>
+      <span class="info-value"><a id="branch-link" href="" target="_blank">—</a></span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">PR</span>
+      <span id="pr-value" class="info-value muted">— (will appear once the first Skill commits)</span>
     </div>
   </div>
 
-  <div class="card" id="result-card" style="display:none;">
-    <div id="skill-summary"></div>
-    <div class="links" id="result-links"></div>
-    <pre id="result-json"></pre>
-    <div class="stderr-label" id="stderr-label" style="display:none;">CLI stderr</div>
-    <pre class="stderr" id="result-stderr" style="display:none;"></pre>
-    <div class="meta" id="result-meta"></div>
-  </div>
+  <div id="cards" class="cards"></div>
 
   <script>
-    const promptEl = document.getElementById("prompt");
+    const SKILLS = ["lint-and-test", "dependency-audit", "security-scan", "build-and-release"];
+
     const runBtn = document.getElementById("run-btn");
-    const runAgainBtn = document.getElementById("run-again");
-    const statusEl = document.getElementById("status");
-    const resultCard = document.getElementById("result-card");
-    const skillSummary = document.getElementById("skill-summary");
-    const resultLinks = document.getElementById("result-links");
-    const resultJson = document.getElementById("result-json");
-    const resultStderr = document.getElementById("result-stderr");
-    const stderrLabel = document.getElementById("stderr-label");
-    const resultMeta = document.getElementById("result-meta");
-
-    function showStderr(lines) {
-      // Accept array of lines OR string — render as block of text with line breaks.
-      if (!lines || (Array.isArray(lines) && lines.length === 0)) {
-        resultStderr.style.display = "none";
-        stderrLabel.style.display = "none";
-        return;
-      }
-      const text = Array.isArray(lines) ? lines.join("\n") : String(lines);
-      resultStderr.textContent = text;
-      resultStderr.style.display = "block";
-      stderrLabel.style.display = "block";
-    }
-
-    let lastPrompt = null;
-
-    document.querySelectorAll(".chip").forEach(chip => {
-      chip.addEventListener("click", () => {
-        promptEl.value = chip.dataset.prompt;
-        promptEl.focus();
-      });
-    });
-
-    function setRunning(isRunning) {
-      runBtn.disabled = isRunning;
-      runAgainBtn.disabled = isRunning || !lastPrompt;
-      if (isRunning) {
-        statusEl.innerHTML = '<span class="spinner"></span>Claude is working — typically 20-90 seconds';
-      } else {
-        statusEl.textContent = "";
-      }
-    }
-
-    function renderResult(data) {
-      resultCard.style.display = "block";
-
-      const out = data.output || {};
-      // The "no Skill matched" output shape, produced by the wrapper
-      // instruction in server/main.py: skill is null, status is "refused",
-      // and `message` carries Claude's full prose reply verbatim.
-      const noSkillMatched =
-        out && out.skill === null && out.status === "refused" && out.message;
-
-      if (noSkillMatched) {
-        skillSummary.innerHTML =
-          '<span class="skill-badge refused">no skill matched</span>' +
-          ' &middot; <span class="meta">Claude declined to invoke a Skill. See its reply below.</span>';
-        resultLinks.innerHTML = "";
-        // Show the message verbatim — that's the actual user-facing reply.
-        resultJson.textContent = out.message;
-      } else {
-        const status = out.status || (out.refused ? "refused" : "?");
-        const skill = out.skill || "(parse error)";
-
-        const badgeClass = status === "refused" ? "skill-badge refused" : "skill-badge";
-        skillSummary.innerHTML =
-          `<span class="${badgeClass}">${skill}</span> &middot; status: <strong>${status}</strong>` +
-          (out.notes ? ` &middot; <span class="meta">${escapeHtml(out.notes)}</span>` : "");
-
-        const links = [];
-        if (out.commit_url) links.push(`<a href="${out.commit_url}" target="_blank">commit</a>`);
-        if (out.pr_url) links.push(`<a href="${out.pr_url}" target="_blank">PR</a>`);
-        if (Array.isArray(out.workflow_runs)) {
-          out.workflow_runs.forEach((r, i) => {
-            if (r && r.url) {
-              const label = `run #${i + 1}` + (r.status ? ` (${r.status})` : "");
-              links.push(`<a href="${r.url}" target="_blank">${label}</a>`);
-            }
-          });
-        }
-        resultLinks.innerHTML = links.join("");
-
-        resultJson.textContent = JSON.stringify(data.output, null, 2);
-      }
-
-      showStderr(data.stderr_lines);
-
-      const metaParts = [`took ${data.duration_s.toFixed(1)}s`];
-      if (data.num_turns !== null && data.num_turns !== undefined) metaParts.push(`${data.num_turns} turns`);
-      if (data.cost_usd !== null && data.cost_usd !== undefined) metaParts.push(`$${data.cost_usd.toFixed(3)}`);
-      if (data.parse_error) metaParts.push(`<span class="error">parse error: ${escapeHtml(data.parse_error)}</span>`);
-      resultMeta.innerHTML = metaParts.join(" &middot; ");
-    }
+    const placeholder = document.getElementById("placeholder");
+    const pipelineStatus = document.getElementById("pipeline-status");
+    const pipelineStatusText = document.getElementById("pipeline-status-text");
+    const pipelineInfo = document.getElementById("pipeline-info");
+    const branchLink = document.getElementById("branch-link");
+    const prValue = document.getElementById("pr-value");
+    const cardsContainer = document.getElementById("cards");
 
     function escapeHtml(s) {
       const d = document.createElement("div");
-      d.textContent = s;
+      d.textContent = s == null ? "" : String(s);
       return d.innerHTML;
     }
 
-    async function runOnce(prompt) {
-      const res = await fetch("/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
-      const bodyText = await res.text();
-      if (!res.ok) {
-        // Try to parse so we can pull message + stderr_lines out of FastAPI's
-        // {"detail": {...}} envelope. Fall back to raw text on parse failure.
-        let parsed = null;
-        try { parsed = JSON.parse(bodyText); } catch (_) {}
-        const err = new Error(`HTTP ${res.status}`);
-        err.parsed = parsed;
-        err.rawBody = bodyText;
-        throw err;
-      }
-      return JSON.parse(bodyText);
+    function setPipelineStatus(state, text) {
+      pipelineStatus.classList.remove("running", "done", "failed");
+      if (state) pipelineStatus.classList.add(state);
+      pipelineStatusText.textContent = text || "";
+      pipelineStatus.hidden = !text;
     }
 
-    function renderError(e) {
-      resultCard.style.display = "block";
-      skillSummary.innerHTML = '<span class="error">Request failed</span>';
-      resultLinks.innerHTML = "";
-      resultMeta.textContent = "";
-
-      const detail = e.parsed && e.parsed.detail;
-      // FastAPI HTTPException nests under .detail; our _agent_failure puts
-      // {error, message, stderr} there. Surface those cleanly.
-      if (detail && typeof detail === "object") {
-        const lines = [];
-        if (detail.error) lines.push(`error: ${detail.error}`);
-        if (detail.message) lines.push(`message: ${detail.message}`);
-        resultJson.textContent = lines.join("\n");
-        showStderr(detail.stderr);
-      } else if (typeof detail === "string") {
-        resultJson.textContent = detail;
-        showStderr(null);
-      } else {
-        resultJson.textContent = e.rawBody || String(e.message || e);
-        showStderr(null);
+    function renderCards() {
+      cardsContainer.innerHTML = "";
+      for (const skill of SKILLS) {
+        const card = document.createElement("div");
+        card.className = "card queued";
+        card.dataset.skill = skill;
+        card.innerHTML = `
+          <div class="card-header">
+            <span class="card-title">${escapeHtml(skill)}</span>
+            <span class="card-status">queued</span>
+          </div>
+          <div class="card-body">
+            <div class="card-empty">waiting…</div>
+          </div>
+          <div class="card-footer">
+            <span class="card-duration"></span>
+            <span class="card-turns"></span>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
       }
     }
 
-    async function handleRun(prompt) {
-      lastPrompt = prompt;
-      setRunning(true);
-      resultCard.style.display = "none";
+    function setCardState(skill, state, payload) {
+      const card = cardsContainer.querySelector(`[data-skill="${skill}"]`);
+      if (!card) return;
+      card.classList.remove("queued", "running", "done", "failed");
+      card.classList.add(state);
+
+      const statusEl = card.querySelector(".card-status");
+      const body = card.querySelector(".card-body");
+      const dur = card.querySelector(".card-duration");
+      const turns = card.querySelector(".card-turns");
+
+      if (state === "running") {
+        statusEl.innerHTML = '<span class="spinner"></span> running';
+        body.innerHTML = '<div class="card-empty">Claude is working on this Skill…</div>';
+        dur.textContent = "";
+        turns.textContent = "";
+      } else if (state === "done" && payload) {
+        const out = payload.output || {};
+        statusEl.textContent = out.status || "done";
+        renderDoneBody(body, out);
+        if (typeof payload.duration_s === "number") dur.textContent = `${payload.duration_s.toFixed(1)}s`;
+        if (typeof payload.num_turns === "number") turns.textContent = `${payload.num_turns} turns`;
+      } else if (state === "failed" && payload) {
+        statusEl.textContent = "failed";
+        body.innerHTML = `<div class="card-error">${escapeHtml(payload.error || "Error")}: ${escapeHtml(payload.message || "")}</div>`;
+        dur.textContent = "";
+        turns.textContent = "";
+      }
+    }
+
+    function renderDoneBody(body, out) {
+      const parts = [];
+      const status = out.status || "?";
+      parts.push(`<div class="card-output-status">status: <code>${escapeHtml(status)}</code></div>`);
+      if (out.notes) parts.push(`<div class="card-notes">${escapeHtml(out.notes)}</div>`);
+
+      const links = [];
+      if (out.commit_url) links.push(`<a href="${out.commit_url}" target="_blank">commit</a>`);
+      if (out.pr_url) links.push(`<a href="${out.pr_url}" target="_blank">PR</a>`);
+      if (Array.isArray(out.workflow_runs)) {
+        out.workflow_runs.forEach((r, i) => {
+          if (r && r.url) {
+            const label = `run #${i + 1}` + (r.status ? ` (${r.status})` : "");
+            links.push(`<a href="${r.url}" target="_blank">${escapeHtml(label)}</a>`);
+          }
+        });
+      }
+      if (out.refused) {
+        const reason = out.refused.reason || JSON.stringify(out.refused);
+        parts.push(`<div class="card-notes">refused: ${escapeHtml(reason)}</div>`);
+      }
+      if (links.length) parts.push(`<div class="card-links">${links.join("")}</div>`);
+      else if (!out.notes) parts.push('<div class="card-empty">no links emitted</div>');
+
+      body.innerHTML = parts.join("");
+    }
+
+    function setPrLink(url) {
+      if (!url) return;
+      prValue.classList.remove("muted");
+      prValue.innerHTML = `<a href="${url}" target="_blank">${escapeHtml(url)}</a>`;
+    }
+
+    function handleEvent(event, data) {
+      if (event === "started") {
+        placeholder.hidden = true;
+        pipelineInfo.hidden = false;
+        if (data.branch_url) {
+          branchLink.href = data.branch_url;
+          branchLink.textContent = data.branch;
+        } else {
+          branchLink.removeAttribute("href");
+          branchLink.textContent = data.branch;
+        }
+        prValue.classList.add("muted");
+        prValue.textContent = "— (will appear once the first Skill commits)";
+        setPipelineStatus("running", `Pipeline running on ${data.branch}…`);
+        renderCards();
+      } else if (event === "skill_started") {
+        setCardState(data.skill, "running");
+      } else if (event === "skill_completed") {
+        setCardState(data.skill, "done", data);
+        if (data.output && data.output.pr_url) setPrLink(data.output.pr_url);
+      } else if (event === "skill_failed") {
+        setCardState(data.skill, "failed", data);
+      } else if (event === "done") {
+        if (data.pr_url) setPrLink(data.pr_url);
+        const failed = Object.values(data.results || {}).filter(
+          r => r && (r.error || (r.output && r.output.status === "refused"))
+        ).length;
+        if (failed === 0) setPipelineStatus("done", "Pipeline complete.");
+        else setPipelineStatus("failed", `Pipeline complete with ${failed} Skill${failed === 1 ? "" : "s"} not produced.`);
+      }
+    }
+
+    function parseSseMessage(msg) {
+      const lines = msg.split("\n");
+      let event = null;
+      let data = null;
+      for (const line of lines) {
+        if (line.startsWith("event: ")) event = line.slice(7).trim();
+        else if (line.startsWith("data: ")) {
+          try { data = JSON.parse(line.slice(6)); }
+          catch (_) { return null; }
+        }
+      }
+      if (event && data !== null) return { event, data };
+      return null;
+    }
+
+    async function processSseStream(body) {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) >= 0) {
+          const message = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const parsed = parseSseMessage(message);
+          if (parsed) handleEvent(parsed.event, parsed.data);
+        }
+      }
+      // Flush trailing message if any
+      if (buffer.trim()) {
+        const parsed = parseSseMessage(buffer);
+        if (parsed) handleEvent(parsed.event, parsed.data);
+      }
+    }
+
+    async function runPipeline() {
+      runBtn.disabled = true;
+      runBtn.textContent = "Running…";
+      setPipelineStatus("running", "Starting pipeline…");
+      placeholder.hidden = true;
+      pipelineInfo.hidden = true;
+      cardsContainer.innerHTML = "";
+
       try {
-        const data = await runOnce(prompt);
-        renderResult(data);
+        const res = await fetch("/run/cicd-pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`HTTP ${res.status}: ${txt}`);
+        }
+        await processSseStream(res.body);
       } catch (e) {
-        renderError(e);
+        setPipelineStatus("failed", `Failed: ${e.message || e}`);
       } finally {
-        setRunning(false);
+        runBtn.disabled = false;
+        runBtn.textContent = "Run pipeline";
       }
     }
 
-    runBtn.addEventListener("click", () => {
-      const p = promptEl.value.trim();
-      if (!p) {
-        promptEl.focus();
-        return;
-      }
-      handleRun(p);
-    });
-
-    runAgainBtn.addEventListener("click", () => {
-      if (lastPrompt) handleRun(lastPrompt);
-    });
+    runBtn.addEventListener("click", runPipeline);
   </script>
 </body>
 </html>
