@@ -43,9 +43,20 @@ DEFAULT_ALLOWED_TOOLS = [
     "Glob",
 ]
 
-# Hard cap. Each Skill should converge in well under this; the cap exists
-# to bound runaway loops.
-DEFAULT_MAX_TURNS = 30
+# Hard cap on how many SDK turns one /run call can consume. A single Skill
+# typically converges in 6-8 turns; the older 30-turn ceiling fit a 1-2 Skill
+# session comfortably but ran out of room when a compound prompt asked Claude
+# to chain three or four Skills end-to-end (~24-32 turns just for the Skills,
+# plus inter-Skill transitions). The 21-prompt eval scored 4 ALL: compound
+# prompts as 502 ProcessError, with each call burning ~120-150s before
+# erroring — exactly the shape of "all turns consumed."
+#
+# 60 covers a 4-Skill chain with margin. The cap still bounds runaway loops:
+# a Skill that genuinely cannot converge in 60 turns is broken regardless.
+# /run/cicd-pipeline runs each forced Skill in its own session, so it never
+# bumps against this cap; this lift is for the free-form /run path's compound
+# prompts.
+DEFAULT_MAX_TURNS = 60
 
 
 @dataclass
