@@ -7,14 +7,14 @@ description: Set up a GitHub Actions workflow that runs lint and unit tests on e
 
 ## What this skill does
 
-Writes (or updates) `.github/workflows/lint-and-test.yml` in the current repo, commits it to `claude/ci-demo`, and ensures a single PR to the default branch exists. The actual lint and test execution happens on the GitHub Actions runner — this skill only provisions the workflow file.
+Writes (or updates) `.github/workflows/lint-and-test.yml` in the current repo, commits it to the demo branch, and ensures a single PR to the default branch exists. The demo branch defaults to `claude/ci-demo` but the orchestrator can override it via the `DEMO_BRANCH` env var (so each pipeline run can use a fresh branch). The actual lint and test execution happens on the GitHub Actions runner — this skill only provisions the workflow file.
 
 ## Scripts
 
 The git/gh operations live under this Skill's own `scripts/` directory. The Skill body invokes them rather than inlining shell commands. Available:
 
 - `.claude/skills/lint-and-test/scripts/compare_yaml.sh <a> <b>` — semantic-equal compare; prints `SAME` or `DIFF`
-- `.claude/skills/lint-and-test/scripts/switch_to_demo_branch.sh` — fetch + checkout `claude/ci-demo`, fork from HEAD if remote missing
+- `.claude/skills/lint-and-test/scripts/switch_to_demo_branch.sh` — fetch + checkout the demo branch (`$DEMO_BRANCH`, default `claude/ci-demo`), fork from HEAD if remote missing
 - `.claude/skills/lint-and-test/scripts/ensure_pr.sh` — print existing PR URL, or create a new PR if none exists
 - `.claude/skills/lint-and-test/scripts/list_workflow_runs.sh <filename.yml>` — JSON list of last 5 runs for one workflow
 
@@ -57,12 +57,12 @@ Follow these in order. The semantic compare in step 4 is the idempotency gate: i
 
 6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/lint-and-test.yml`.
 
-7. **Commit and push.**
+7. **Commit and push.** Push to whatever branch the previous step checked out — use `git push -u origin "$(git branch --show-current)"` so per-pipeline branch names work without hardcoding.
 
    ```bash
    git add .github/workflows/lint-and-test.yml
    git commit -m "ci: add lint-and-test workflow via lint-and-test skill"
-   git push -u origin claude/ci-demo
+   git push -u origin "$(git branch --show-current)"
    ```
 
 8. **Ensure the PR exists.**
@@ -91,7 +91,7 @@ After completing the steps (or on early exit from step 1 or step 4), emit exactl
 {
   "skill": "lint-and-test",
   "status": "created" | "updated" | "no_change" | "refused",
-  "branch": "claude/ci-demo",
+  "branch": "<the actual branch you committed to — get it from `git branch --show-current` after the switch script runs; do NOT hardcode 'claude/ci-demo'>",
   "workflow_path": ".github/workflows/lint-and-test.yml",
   "commit_url": "https://github.com/<owner>/<repo>/commit/<sha>" | null,
   "pr_url": "https://github.com/<owner>/<repo>/pull/<n>" | null,
@@ -111,13 +111,13 @@ Status semantics:
 - `no_change`: file exists and is semantically equal to the rendered template; you did not commit. `commit_url` is the previous commit (looked up via `git log` in step 4).
 - `refused`: preconditions not met (e.g. neither Node nor Python detected). Do not commit. Populate `refused.reason`.
 
-Example for the no-change case:
+Example for the no-change case (branch name is illustrative — yours will be whatever `git branch --show-current` returns after step 5):
 
 ```json
 {
   "skill": "lint-and-test",
   "status": "no_change",
-  "branch": "claude/ci-demo",
+  "branch": "demo-20260430-a3f8b2",
   "workflow_path": ".github/workflows/lint-and-test.yml",
   "commit_url": "https://github.com/foo/bar/commit/abc123",
   "pr_url": "https://github.com/foo/bar/pull/1",

@@ -7,14 +7,14 @@ description: Set up a GitHub Actions workflow that scans the repo's dependencies
 
 ## What this skill does
 
-Writes (or updates) `.github/workflows/dependency-audit.yml` in the current repo, commits it to `claude/ci-demo`, and ensures a single PR to the default branch exists. The workflow runs `npm audit` for Node projects and `pip-audit` for Python projects; the run fails when high-severity (or above) advisories are found. This skill provisions the workflow only — actual dependency scanning happens on the GitHub Actions runner.
+Writes (or updates) `.github/workflows/dependency-audit.yml` in the current repo, commits it to the demo branch, and ensures a single PR to the default branch exists. The demo branch defaults to `claude/ci-demo` but the orchestrator can override it via the `DEMO_BRANCH` env var. The workflow runs `npm audit` for Node projects and `pip-audit` for Python projects; the run fails when high-severity (or above) advisories are found. This skill provisions the workflow only — actual dependency scanning happens on the GitHub Actions runner.
 
 ## Scripts
 
 The git/gh operations live under this Skill's own `scripts/` directory. The Skill body invokes them rather than inlining shell commands. Available:
 
 - `.claude/skills/dependency-audit/scripts/compare_yaml.sh <a> <b>` — semantic-equal compare; prints `SAME` or `DIFF`
-- `.claude/skills/dependency-audit/scripts/switch_to_demo_branch.sh` — fetch + checkout `claude/ci-demo`, fork from HEAD if remote missing
+- `.claude/skills/dependency-audit/scripts/switch_to_demo_branch.sh` — fetch + checkout the demo branch (`$DEMO_BRANCH`, default `claude/ci-demo`), fork from HEAD if remote missing
 - `.claude/skills/dependency-audit/scripts/ensure_pr.sh` — print existing PR URL, or create a new PR if none exists
 - `.claude/skills/dependency-audit/scripts/list_workflow_runs.sh <filename.yml>` — JSON list of last 5 runs for one workflow
 
@@ -55,12 +55,12 @@ The git/gh operations live under this Skill's own `scripts/` directory. The Skil
 
 6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/dependency-audit.yml`.
 
-7. **Commit and push.**
+7. **Commit and push.** Push to whatever branch the previous step checked out — use `git push -u origin "$(git branch --show-current)"` so per-pipeline branch names work without hardcoding.
 
    ```bash
    git add .github/workflows/dependency-audit.yml
    git commit -m "ci: add dependency-audit workflow via dependency-audit skill"
-   git push -u origin claude/ci-demo
+   git push -u origin "$(git branch --show-current)"
    ```
 
 8. **Ensure the PR exists.**
@@ -89,7 +89,7 @@ After completing the steps (or on early exit from step 1 or step 4), emit exactl
 {
   "skill": "dependency-audit",
   "status": "created" | "updated" | "no_change" | "refused",
-  "branch": "claude/ci-demo",
+  "branch": "<the actual branch you committed to — get it from `git branch --show-current` after the switch script runs; do NOT hardcode 'claude/ci-demo'>",
   "workflow_path": ".github/workflows/dependency-audit.yml",
   "commit_url": "https://github.com/<owner>/<repo>/commit/<sha>" | null,
   "pr_url": "https://github.com/<owner>/<repo>/pull/<n>" | null,
