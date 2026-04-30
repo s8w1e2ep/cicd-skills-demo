@@ -227,6 +227,14 @@
       <span class="info-label">PR</span>
       <span id="pr-value" class="info-value muted">— (will appear once the first Skill commits)</span>
     </div>
+    <div class="info-row">
+      <span class="info-label">Tag</span>
+      <span id="tag-value" class="info-value muted">— (will be pushed after all Skills complete)</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Build run</span>
+      <span id="release-run-value" class="info-value muted">— (will start when the tag is pushed)</span>
+    </div>
   </div>
 
   <div id="cards" class="cards"></div>
@@ -241,6 +249,8 @@
     const pipelineInfo = document.getElementById("pipeline-info");
     const branchLink = document.getElementById("branch-link");
     const prValue = document.getElementById("pr-value");
+    const tagValue = document.getElementById("tag-value");
+    const releaseRunValue = document.getElementById("release-run-value");
     const cardsContainer = document.getElementById("cards");
 
     function escapeHtml(s) {
@@ -342,6 +352,29 @@
       prValue.innerHTML = `<a href="${url}" target="_blank">${escapeHtml(url)}</a>`;
     }
 
+    function setTagInfo(tag, tagUrl, sha) {
+      tagValue.classList.remove("muted");
+      const shaPart = sha ? ` <span style="color: var(--muted); font-size: 12px;">@ ${escapeHtml(sha)}</span>` : "";
+      if (tagUrl) {
+        tagValue.innerHTML = `<a href="${tagUrl}" target="_blank">${escapeHtml(tag)}</a>${shaPart}`;
+      } else {
+        tagValue.textContent = tag;
+      }
+    }
+
+    function setReleaseRunLink(url) {
+      if (!url) return;
+      releaseRunValue.classList.remove("muted");
+      releaseRunValue.innerHTML = `<a href="${url}" target="_blank">${escapeHtml(url)}</a>`;
+    }
+
+    function setTagFailed(error) {
+      tagValue.classList.remove("muted");
+      tagValue.innerHTML = `<span style="color: var(--error);">tag push failed: ${escapeHtml(error || "unknown error")}</span>`;
+      releaseRunValue.classList.add("muted");
+      releaseRunValue.textContent = "— (skipped because tag push failed)";
+    }
+
     function handleEvent(event, data) {
       if (event === "started") {
         placeholder.hidden = true;
@@ -364,6 +397,15 @@
         if (data.output && data.output.pr_url) setPrLink(data.output.pr_url);
       } else if (event === "skill_failed") {
         setCardState(data.skill, "failed", data);
+      } else if (event === "tag_pushed") {
+        setTagInfo(data.tag, data.tag_url, data.sha);
+        // Build run not known yet; flip the row to "waiting" muted text.
+        releaseRunValue.classList.add("muted");
+        releaseRunValue.textContent = "— (waiting for the workflow run to register on GitHub…)";
+      } else if (event === "release_run_started") {
+        setReleaseRunLink(data.run_url);
+      } else if (event === "tag_failed") {
+        setTagFailed(data.error);
       } else if (event === "done") {
         if (data.pr_url) setPrLink(data.pr_url);
         const failed = Object.values(data.results || {}).filter(

@@ -7,7 +7,7 @@ description: Set up a GitHub Actions workflow that triggers on git tag pushes ma
 
 ## What this skill does
 
-Writes (or updates) `.github/workflows/release.yml` in the current repo, commits it to the demo branch, and ensures a single PR to the default branch exists. The demo branch defaults to `claude/ci-demo` but the orchestrator can override it via the `DEMO_BRANCH` env var. The workflow triggers on any pushed tag matching `v*`, builds the distributable for the detected language stack (`npm pack` → `*.tgz` for Node; `python -m build` → wheel + sdist for Python), and creates a GitHub Release with the artifact attached and auto-generated notes. This skill provisions the workflow only — actual builds and releases happen on the GitHub Actions runner when a tag is pushed.
+Writes (or updates) `.github/workflows/build-and-release.yml` in the current repo, commits it to the demo branch, and ensures a single PR to the default branch exists. The demo branch defaults to `claude/ci-demo` but the orchestrator can override it via the `DEMO_BRANCH` env var. The workflow triggers on any pushed tag matching `v*`, builds the distributable for the detected language stack (`npm pack` → `*.tgz` for Node; `python -m build` → wheel + sdist for Python), and creates a GitHub Release with the artifact attached and auto-generated notes. This skill provisions the workflow only — actual builds and releases happen on the GitHub Actions runner when a tag is pushed.
 
 ## Scripts
 
@@ -25,23 +25,23 @@ The git/gh operations live under this Skill's own `scripts/` directory. The Skil
    If neither Node nor Python is detected, exit with `status: refused` and `refused.reason` like "No supported language stack found at repo root."
 
 2. **Render the new workflow.** Read the matching template(s) from `assets/`:
-   - Python only: copy `assets/release.python.yml` verbatim.
-   - Node only: copy `assets/release.node.yml` verbatim.
+   - Python only: copy `assets/build-and-release.python.yml` verbatim.
+   - Node only: copy `assets/build-and-release.node.yml` verbatim.
    - Both: read both and emit a single workflow file with both jobs preserved as-is under one `jobs:` map. Keep job names `release-python` and `release-node` so the merged file is deterministic across runs.
 
    Write the rendered content to `/tmp/new-workflow.yml`.
 
-3. **Read existing target if present.** Use Read on `.github/workflows/release.yml`. If the file does not exist, treat it as DIFF and proceed to step 5 with `status: created`.
+3. **Read existing target if present.** Use Read on `.github/workflows/build-and-release.yml`. If the file does not exist, treat it as DIFF and proceed to step 5 with `status: created`.
 
 4. **Idempotency check.** If the file existed in step 3:
 
    ```bash
-   bash .claude/skills/build-and-release/scripts/compare_yaml.sh .github/workflows/release.yml /tmp/new-workflow.yml
+   bash .claude/skills/build-and-release/scripts/compare_yaml.sh .github/workflows/build-and-release.yml /tmp/new-workflow.yml
    ```
 
    If the output is `SAME`:
    - Do not write, do not commit, do not push.
-   - Get the previous commit URL: `git log -1 --format="%H" -- .github/workflows/release.yml` and the repo URL via `git config --get remote.origin.url`.
+   - Get the previous commit URL: `git log -1 --format="%H" -- .github/workflows/build-and-release.yml` and the repo URL via `git config --get remote.origin.url`.
    - Get the existing PR URL via `bash .claude/skills/build-and-release/scripts/ensure_pr.sh`.
    - Emit the JSON output with `status: "no_change"` and stop.
 
@@ -53,13 +53,13 @@ The git/gh operations live under this Skill's own `scripts/` directory. The Skil
    bash .claude/skills/build-and-release/scripts/switch_to_demo_branch.sh
    ```
 
-6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/release.yml`.
+6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/build-and-release.yml`.
 
 7. **Commit and push.** Push to whatever branch the previous step checked out — use `git push -u origin "$(git branch --show-current)"` so per-pipeline branch names work without hardcoding.
 
    ```bash
-   git add .github/workflows/release.yml
-   git commit -m "ci: add release workflow via build-and-release skill"
+   git add .github/workflows/build-and-release.yml
+   git commit -m "ci: add build-and-release workflow via build-and-release skill"
    git push -u origin "$(git branch --show-current)"
    ```
 
@@ -74,7 +74,7 @@ The git/gh operations live under this Skill's own `scripts/` directory. The Skil
 9. **Read the resulting GitHub Actions runs for this workflow.**
 
    ```bash
-   bash .claude/skills/build-and-release/scripts/list_workflow_runs.sh release.yml
+   bash .claude/skills/build-and-release/scripts/list_workflow_runs.sh build-and-release.yml
    ```
 
    Note: this workflow is tag-triggered, so the run list on the demo branch will usually be empty until someone pushes a tag. That's expected — populate `workflow_runs` with whatever the command returns (often `[]`), and add a note to that effect (see Output format).
@@ -90,7 +90,7 @@ After completing the steps (or on early exit from step 1 or step 4), emit exactl
   "skill": "build-and-release",
   "status": "created" | "updated" | "no_change" | "refused",
   "branch": "<the actual branch you committed to — get it from `git branch --show-current` after the switch script runs; do NOT hardcode 'claude/ci-demo'>",
-  "workflow_path": ".github/workflows/release.yml",
+  "workflow_path": ".github/workflows/build-and-release.yml",
   "commit_url": "https://github.com/<owner>/<repo>/commit/<sha>" | null,
   "pr_url": "https://github.com/<owner>/<repo>/pull/<n>" | null,
   "workflow_runs": [
@@ -102,4 +102,4 @@ After completing the steps (or on early exit from step 1 or step 4), emit exactl
 }
 ```
 
-Status semantics match the other CI/CD skills (`created`, `updated`, `no_change`, `refused`). The release workflow only runs when a tag matching `v*` is pushed, so an empty `workflow_runs` array on creation is normal and not an error — call this out in `notes` (e.g. `"workflow_runs is empty because release.yml triggers only on v* tag push; push a tag to fire it."`).
+Status semantics match the other CI/CD skills (`created`, `updated`, `no_change`, `refused`). The release workflow only runs when a tag matching `v*` is pushed, so an empty `workflow_runs` array on creation is normal and not an error — call this out in `notes` (e.g. `"workflow_runs is empty because build-and-release.yml triggers only on v* tag push; push a tag to fire it."`).
