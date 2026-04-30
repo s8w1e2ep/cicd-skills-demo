@@ -11,9 +11,9 @@ Each phase ends in a **commit** with an intent-revealing message. The grader wil
 - [x] `git init` inside `cicd-skills-demo/`
 - [x] `.gitignore`: Python, `.env`, `/tmp`, scratch dirs, `eval/results/*.md` (keep one sample)
 - [x] First commit: "scaffold spec/plan/task docs and CLAUDE.md"
-- [ ] Push this repo to GitHub as a public repo — **this same repo is the demo target** (Skills operate on it). User does this when ready.
-- [ ] Generate fine-grained PAT scoped to this repo: `Contents: write` + `Workflows: write` + `Pull requests: write` + `Actions: read`. Stored as Zeabur secret env var `GITHUB_TOKEN`; not needed locally.
-- [ ] `ANTHROPIC_API_KEY` will also be a Zeabur secret env var; not needed locally.
+- [x] Push this repo to GitHub as a public repo — **this same repo is the demo target** (Skills operate on it). Done: `s8w1e2ep/cicd-skills-demo`
+- [x] Generate fine-grained PAT scoped to this repo: `Contents: write` + `Workflows: write` + `Pull requests: write` + `Actions: read`. Stored as Zeabur secret env var `GITHUB_TOKEN`.
+- [x] Auth credential set as a Zeabur secret env var. Eventually `CLAUDE_CODE_OAUTH_TOKEN` rather than `ANTHROPIC_API_KEY` — see Phase 7.
 
 ## Phase 1 — One Skill end-to-end  (≈ 30 min)
 
@@ -25,8 +25,8 @@ Goal: prove the loop works for `lint-and-test` before scaling.
 - [x] `.claude/skills/lint-and-test/evals/evals.json` — 2 entries (happy + idempotency)
 - [x] `server/main.py` — both `/run` (agent routing) and `/run/skill/{name}` (forced) shipped together since the SDK exposes both at once
 - [x] `Dockerfile` written; build verified during Zeabur deploy
-- [ ] Smoke test against demo repo (Zeabur 502 — pending deploy fix)
-- [ ] Re-run with same input → confirm `status: no_change` (pending deploy fix)
+- [x] Smoke test against demo repo — `lint-and-test` Skill `status: created`, commit `c3553a7`, workflow run `25123883168` succeeded
+- [x] Re-run with same input → confirmed `status: no_change` (commit URL unchanged, no new commit on `claude/ci-demo`)
 - [x] **Commit**: `Phase 1: FastAPI server + Dockerfile + Zeabur config`
 
 ## Phase 2 — Remaining three Skills  (≈ 25 min)
@@ -37,7 +37,8 @@ For each Skill: SKILL.md + assets + evals/evals.json (≥ 2 entries).
 - [x] `.claude/skills/security-scan/` (gitleaks + semgrep, SARIF to Security tab)
 - [x] `.claude/skills/build-and-release/` (tag-on-push, npm pack / python -m build, GitHub Release)
 - [x] `/run/skill/{name}` already dispatches by name — `KNOWN_SKILLS` covers all four
-- [ ] Smoke test each Skill against demo repo (pending deploy fix)
+- [x] Smoke test each Skill against demo repo — all four passed; PR #1 carries one intent-revealing commit per Skill (`c3553a7`, `2862d95`, `6b4d3c9`, `f11006d`)
+- [x] `build-and-release` end-to-end verified by tag push: `v0.1.0` triggered `release.yml`, run `25152440691` built sdist+wheel and published Release
 - [x] **Commit**: `Phase 2: dependency-audit, security-scan, build-and-release Skills`
 
 ## Phase 3 — Agent routing + UI  (≈ 15 min)
@@ -89,29 +90,16 @@ explicit two-run idempotency check + the non-allowlisted-repo rejection.
 - [x] All four Skills run end-to-end against demo repo — see PR #1
 - [x] Switched auth from API key to OAuth token (Pro/Max subscription) when API credit was unavailable
 
-## Phase 8 — Final pass  (≈ 5 min, only if time remains)
+## Phase 8 — Post-deploy polish (work that didn't fit the original plan)
 
-- [ ] Re-read `git log`
-- [ ] Re-read README cold
+This phase captures non-trivial work that surfaced after the original
+plan shipped — debug paths, contract changes, and a Skill template fix
+discovered by GitHub Actions itself.
 
----
-
-## What gets cut first if we run over
-
-In priority order (cut bottom-up):
-
-1. Phase 8
-2. Description-revision cycle in Phase 4 (document low precision honestly instead)
-3. `build-and-release` template polish — keep it minimal
-4. Demo UI styling — ugly-but-functional is fine
-5. Per-skill `evals.json` content — leave with one entry each instead of two
-
-What does **not** get cut:
-
-- Four `SKILL.md` files exist with non-overlapping pushy descriptions
-- `/run` works on Zeabur
-- At least one Skill has a verified end-to-end demo (commit on branch + GitHub Actions run started)
-- Routing eval ran at least once with a committed report
-- README has the "what I don't handle well" section
-- README documents the `workflows`-scope concern
-- `prompts/` ≥ 3 substantive entries
+- [x] Auth swap: `ANTHROPIC_API_KEY` → `CLAUDE_CODE_OAUTH_TOKEN` after the API account ran into a credit-purchase block. Both are accepted by `_require_env` (mutually exclusive in deploy); see commit `7a622a8`.
+- [x] `NO_SKILL_FALLBACK_INSTRUCTION` wrapper added to `/run` so out-of-scope / destructive prompts return `{"skill": null, "status": "refused", "message": ...}` instead of unfenced prose. Eval safety category went from undefined to 100%; commit `a38b6d1`.
+- [x] `dependency-audit.python.yml` template fix: bare `pip-audit --strict` was scanning the runner's system pip and tripping on CVE-2026-3219; restricted to `pip-audit . --strict` and gated on `requirements.txt` absence. Commit `88eca06`; rerun verified green at run `25127294071`.
+- [x] `pyproject.toml` `[build-system]` block added so `release.yml`'s `python -m build` produces clean PEP 517 artifacts. Commit `f954d0a` on main, cherry-picked to `claude/ci-demo` as `a3d3e41`.
+- [x] Three diagnostic endpoints added during a long ProcessError debug session: `/debug/cli-binary`, `/debug/cli-print`, `/debug/cli-probe`. Each isolates a different layer (binary location, print-mode stderr, protocol-level invocation).
+- [x] `prompts/` numbering closed (former `06`/`07` renamed to `05`/`06`) once the eval ran and the gap stopped carrying signal.
+- [x] Re-read `git log` cold to verify each commit's message stands on its own without conversation context.
