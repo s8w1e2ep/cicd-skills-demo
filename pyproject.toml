@@ -1,3 +1,11 @@
+# Required for `python -m build` to produce sdist + wheel reproducibly. The
+# demo service itself is not consumed as a library — this is here so the
+# release.yml workflow (which build-and-release Skill produces) has a valid
+# PEP 517 backend to call when a v* tag is pushed.
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "cicd-skills-demo"
 version = "0.1.0"
@@ -8,6 +16,13 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "claude-agent-sdk>=0.0.13",
 ]
+
+# Only ship the server package in the built distribution. Without this,
+# setuptools' auto-discovery would also pick up tests/, eval/, prompts/,
+# which are not part of the runtime artifact.
+[tool.setuptools]
+packages = ["server"]
+include-package-data = true
 
 [project.optional-dependencies]
 dev = [
