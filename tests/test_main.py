@@ -273,6 +273,36 @@ def test_run_with_trailing_slash_in_repo_url_still_accepts(configured, monkeypat
 # ---------------------------------------------------------------------------
 
 
+def test_pipeline_returns_503_when_not_configured(unconfigured):
+    """Same fail-fast behaviour as /run — env validation runs before we open
+    the SSE stream."""
+    client = TestClient(unconfigured.app)
+    r = client.post("/run/cicd-pipeline", json={"prompt": "ignored"})
+    assert r.status_code == 503
+    assert "missing env var" in r.json()["detail"]
+
+
+def test_pipeline_rejects_non_allowlisted_repo_url(configured):
+    """Repo allowlist applies to the pipeline endpoint as well — the safety
+    wall must wrap every entry point that ends up cloning."""
+    client = TestClient(configured.app)
+    r = client.post(
+        "/run/cicd-pipeline",
+        json={"prompt": "x", "repo_url": "https://github.com/elsewhere/repo"},
+    )
+    assert r.status_code == 400
+    assert "allowlist" in r.json()["detail"]
+
+
+def test_generate_pipeline_branch_format(configured):
+    """Branch names embed UTC timestamp + 6 hex chars so two clicks within
+    the same second don't collide."""
+    import re
+
+    name = configured._generate_pipeline_branch()
+    assert re.fullmatch(r"demo-\d{8}-\d{6}-[0-9a-f]{6}", name), name
+
+
 def test_run_skill_unknown_name_returns_404(configured):
     client = TestClient(configured.app)
     r = client.post("/run/skill/not-a-real-skill", json={"prompt": "test"})
