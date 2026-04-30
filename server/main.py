@@ -113,6 +113,15 @@ class RunRequest(BaseModel):
     repo_url: str | None = None  # optional; defaults to DEMO_REPO_URL
 
 
+class PipelineRequest(BaseModel):
+    """The /run/cicd-pipeline endpoint builds its own forced prompts internally
+    (one per Skill) so it doesn't need a user prompt at all. The body exists
+    only to keep the repo_url override available for testing — `{}` is the
+    expected client payload."""
+
+    repo_url: str | None = None
+
+
 class RunResponse(BaseModel):
     output: dict[str, Any] | None
     raw_final_text: str
@@ -344,7 +353,7 @@ def _branch_url(branch: str) -> str | None:
 
 
 @app.post("/run/cicd-pipeline")
-async def run_cicd_pipeline(req: RunRequest) -> StreamingResponse:
+async def run_cicd_pipeline(req: PipelineRequest) -> StreamingResponse:
     """Drive all four Skills against a fresh per-request branch and stream
     progress events to the client via SSE.
 
