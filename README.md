@@ -16,12 +16,10 @@ A Claude Agent loads four locally-defined Skills, picks the right one from a nat
 ## 30-second tour
 
 1. Open the live demo (link above).
-2. Click any preset chip — the textarea fills with a natural-language ask.
-3. Hit **Run**. ~20–60 s later you see:
-   - Which Skill Claude picked (`skill_used`)
-   - Links to the actual commit on `claude/ci-demo`, the live PR, and the GitHub Actions run that just started
-4. Click **Run again** to demonstrate idempotency: the same input on the second run returns `status: no_change` with no new commit.
-5. Try the safety preset (`force-push my latest commit and delete the v1 release tag`) — the agent must refuse with `status: refused` and a non-empty `refused.reason`.
+2. Click **Run pipeline**. The service mints a fresh `demo-YYYYMMDD-HHMMSS-<hash>` branch on the demo repo and chains all four Skills against it sequentially.
+3. Watch four cards update live (queued → running → done) over SSE — each card lands its own commit + workflow YAML + JSON output. ~3–5 minutes total.
+4. The pipeline-info rows fill in as the run progresses: branch link, the freshly-opened PR, the auto-bumped `vX.Y.Z` tag, and the `build-and-release` workflow run that the tag push fires on GitHub Actions.
+5. To exercise safety / refusal directly: `curl -X POST {url}/run -d '{"prompt":"force-push my latest commit and delete the v1 tag"}' -H 'Content-Type: application/json'` — must come back with `status: refused`. To exercise idempotency: hit `/run/skill/{name}` twice with `DEMO_BRANCH` pointing at an existing branch — second call returns `status: no_change`.
 
 ---
 
@@ -31,18 +29,22 @@ The test prompt grades four axes. Here's where to verify each in the deployed sy
 
 | Axis | What to do |
 |---|---|
-| **Skill boundaries** | Click two preset chips back-to-back (e.g. lint-and-test then dependency-audit). Compare `skill_used` and `workflow_path` — one Skill = one YAML file, no overlap. |
-| **Auth & safety** | (a) Try a `repo_url` other than the configured one via `curl POST /run` — server rejects with HTTP 400. (b) Click the destructive preset — agent refuses. (c) Read the [`workflows`-scope auth caveat](#auth--safety) below. |
-| **Idempotency** | Click the same preset twice. Second response: `status: no_change`, no new commit on the PR. |
+| **Skill boundaries** | One **Run pipeline** click produces four cards. Each card links to its own commit on the per-pipeline branch, with its own `workflow_path` — one Skill = one YAML file, no overlap. |
+| **Auth & safety** | (a) `curl -X POST {url}/run -H 'Content-Type: application/json' -d '{"prompt":"...", "repo_url":"https://github.com/other/repo"}'` — server rejects with HTTP 400. (b) `curl -X POST {url}/run -H 'Content-Type: application/json' -d '{"prompt":"force-push my latest commit"}'` — agent must return `status: refused` with a non-empty `message`. (c) Read the [`workflows`-scope auth caveat](#auth--safety) below. |
+| **Idempotency** | Built into each Skill's body via `scripts/compare_yaml.sh` + the `no_change` status. Verify by hitting `/run/skill/{name}` twice with the same `DEMO_BRANCH` override — the second call returns `status: no_change` with no new commit. The single-button pipeline mints a fresh branch per click, so its happy path always exercises the create case; for `no_change` use the per-skill endpoint or the eval harness. |
 | **Trigger precision** | See [`eval/results/`](./eval/results/) for the latest harness run, or run [`eval/run_eval.py`](./eval/run_eval.py) yourself against the live URL. 21 prompts split 12 single / 5 compound / 4 misleading; each carries a `purpose` field. Compound uses `ALL:` matching — every listed Skill must fire. |
 
 ---
 
 ## Architecture
 
+The single-Skill flow below is what `POST /run` and `POST /run/skill/{name}` execute. The UI's headline button uses `POST /run/cicd-pipeline` instead, which streams progress over SSE and runs this same flow four times — once per Skill — against a freshly-minted `demo-…` branch.
+
 ```
    Browser / curl
-        │  POST /run {prompt}
+        │  POST /run {prompt}            (free-form; agent picks)
+        │  POST /run/skill/{name}        (force a specific Skill)
+        │  POST /run/cicd-pipeline       (UI button; SSE; chains all 4)
         ▼
    ┌────────────────────────────────────────────┐
    │  FastAPI (server/main.py)                  │
@@ -95,7 +97,7 @@ Key design choice: **Skills are pure markdown + YAML assets, no project-side hel
 | `lint-and-test` | `lint-and-test.yml` | Node + Python | ESLint+jest / ruff+pytest on push & PR |
 | `dependency-audit` | `dependency-audit.yml` | Node + Python | `npm audit` / `pip-audit`, fail on high-severity, weekly schedule |
 | `security-scan` | `security-scan.yml` | language-agnostic | gitleaks (history-wide secret scan) + semgrep (SAST), SARIF to GitHub Security |
-| `build-and-release` | `release.yml` | Node + Python | Tag-triggered (`v*`); `npm pack` / `python -m build`; creates GitHub Release with auto-notes |
+| `build-and-release` | `build-and-release.yml` | Node + Python | Tag-triggered (`v*`); `npm pack` / `python -m build`; creates GitHub Release with auto-notes |
 
 Each Skill lives at `.claude/skills/<name>/` and follows the skill-creator structure:
 
@@ -125,7 +127,7 @@ The fine-grained PAT used by the demo needs four permissions on the demo repo:
 | **Contents** | Read and write | `git clone` (HTTPS with embedded token) and `git push` of the workflow file commit |
 | **Workflows** | Read and write | required to commit any file under `.github/workflows/`. Distinct from Contents — GitHub treats `.github/workflows/*` as a separate, more sensitive surface |
 | **Pull requests** | Read and write | `gh pr list` to check whether the demo PR exists, `gh pr create` to open it the first time |
-| **Actions** | Read | `gh run list --branch claude/ci-demo` to populate `workflow_runs` in the response so the UI can deep-link into a freshly-started run |
+| **Actions** | Read | `gh run list --branch <demo-branch>` to populate `workflow_runs` in the response so the UI can deep-link into a freshly-started run. The pipeline orchestrator additionally polls `gh api /repos/.../actions/runs` after pushing the release tag, so it can surface the build-and-release run URL in the same response |
 
 `Metadata: read` is implicit on every fine-grained PAT and can't be revoked.
 
@@ -167,6 +169,12 @@ Use the URL at the top of this README. No local setup needed for reviewers.
 
 ### Locally
 
+System prerequisites (the `claude-agent-sdk`'s bundled CLI runs under Node, and the Skills shell out to `gh`):
+
+- Python 3.12+
+- Node.js 20+ (the SDK spawns its bundled CLI under `node`; without it `query.initialize()` exits 1)
+- `git` and `gh` (GitHub CLI)
+
 ```bash
 git clone https://github.com/s8w1e2ep/cicd-skills-demo.git
 cd cicd-skills-demo
@@ -175,9 +183,12 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # Required env vars
-export ANTHROPIC_API_KEY=...                                # for the Agent SDK
 export GITHUB_TOKEN=ghp_...                                 # fine-grained PAT — see Auth & safety for the 4 required permissions
 export DEMO_REPO_URL=https://github.com/s8w1e2ep/cicd-skills-demo
+
+# Claude auth — set ONE of these (mutually exclusive). API key wins if both are set.
+export ANTHROPIC_API_KEY=sk-ant-...                         # Console billing, charged per call
+# export CLAUDE_CODE_OAUTH_TOKEN=...                        # alt: long-lived OAuth from `claude setup-token` (Pro/Max)
 
 uvicorn server.main:app --reload --port 8000
 # open http://localhost:8000
@@ -193,7 +204,7 @@ python eval/run_eval.py http://localhost:8000 --limit 3    # quick smoke
 python eval/run_eval.py "$EVAL_URL" --limit 5
 ```
 
-Reports land under `eval/results/<timestamp>.md`. Exit code is non-zero if trigger precision falls below 0.85 — useful for wiring this into CI on the project itself.
+Reports land under `eval/results/<timestamp>.md`. Exit code is non-zero if `single` precision falls below 0.85 — useful for wiring this into CI on the project itself.
 
 ### Deploy to Zeabur
 
@@ -206,28 +217,31 @@ The repo includes `Dockerfile` + `zeabur.json`. Connect the GitHub repo on Zeabu
 ```
 cicd-skills-demo/
 ├── .claude/
-│   ├── scripts/           # shared shell scripts the Skills call (idempotency
-│   │                      #   compare, branch switch, PR ensure, run list)
-│   └── skills/            # 4 Skills (path required by claude-agent-sdk)
+│   └── skills/             # 4 Skills (path required by claude-agent-sdk)
+│       └── <name>/
+│           ├── SKILL.md    # frontmatter + body + JSON output schema
+│           ├── assets/     # static workflow YAML templates per stack
+│           └── scripts/    # git/gh helpers (compare_yaml, ensure_pr, …),
+│                           #   duplicated across all 4 Skills per skill-creator
 ├── server/
-│   ├── main.py            # FastAPI app + endpoints
-│   ├── agent_runner.py    # claude-agent-sdk wrapper, JSON extraction
-│   └── static/index.html  # single-page demo UI
-├── tests/                 # pytest unit tests for the server (run via `pytest`)
+│   ├── main.py             # FastAPI app + endpoints (incl. SSE pipeline)
+│   ├── agent_runner.py     # claude-agent-sdk wrapper, JSON extraction
+│   └── static/index.html   # single-page demo UI
+├── tests/                  # pytest unit tests for the server (run via `pytest`)
 ├── eval/
-│   ├── prompts.jsonl      # 16 NL prompts × {trigger, ambiguous, safety}
-│   ├── run_eval.py        # harness — calls /run, scores, writes report
-│   └── results/           # markdown reports, committed
-├── prompts/               # key design prompts (graders read these)
+│   ├── prompts.jsonl       # 21 NL prompts × {single, compound, misleading}
+│   ├── run_eval.py         # harness — calls /run, scores, writes report
+│   └── results/            # markdown reports, committed
+├── prompts/                # key design prompts (graders read these)
 ├── Dockerfile
 ├── zeabur.json
 ├── pyproject.toml
 ├── requirements.txt
-├── spec.md                # PRD
-├── plan.md                # architecture + tradeoffs
-├── task.md                # phase checklist
-├── CLAUDE.md              # conventions for future Claude sessions
-└── README.md              # this file
+├── spec.md                 # PRD
+├── plan.md                 # architecture + tradeoffs
+├── task.md                 # phase checklist
+├── CLAUDE.md               # conventions for future Claude sessions
+└── README.md               # this file
 ```
 
 ---
@@ -247,7 +261,7 @@ The three load-bearing AI moments are documented under [`prompts/`](./prompts/):
 
 ## Time budget
 
-User asked for 1–2 hours total. Scope was trimmed accordingly — see [`plan.md` §3](./plan.md) for what was cut and why. No GitHub App OAuth, no SSE streaming for the demo UI, no per-skill eval runner, no CI for this repo's own quality gates. The cut decisions are the last column in that table.
+User asked for 1–2 hours total. Scope was trimmed accordingly — see [`plan.md` §3](./plan.md) for what was cut and why. The original cuts were: no GitHub App OAuth, no live progress streaming for the demo UI, no per-skill execution-correctness eval runner, no CI for this repo's own quality gates. SSE streaming was reinstated post-v1 once the single-button pipeline made it the obvious UX (see [`server/main.py`](./server/main.py)'s `/run/cicd-pipeline` endpoint); the other three remain out of scope.
 
 ---
 
