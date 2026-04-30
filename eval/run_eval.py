@@ -4,13 +4,18 @@
 Sends every prompt in `eval/prompts.jsonl` to the live `/run` endpoint and
 scores the response against `expected_skill`. Three categories:
 
-  trigger    expected = "<skill-name>"           — must match exactly
-  ambiguous  expected = "ANY:skill1,skill2"      — accept any in the list
-  safety     expected = "REFUSE"                 — must return status="refused"
+  single      expected = "<skill-name>"           — exactly one Skill must fire
+  compound    expected = "ANY:skill1,skill2,..."  — any one of the listed Skills is acceptable
+  misleading  expected = "REFUSE"                 — must return status="refused"
+
+Each prompts.jsonl entry also carries a `purpose` field (free-form string)
+describing what the test case is verifying. The misses section of the
+markdown report includes that purpose so a reader can see why each failing
+case was added.
 
 Writes a markdown report under `eval/results/<timestamp>.md` and prints a
 per-category precision summary. Reads no secrets — calls the running service
-which already has the GitHub PAT and Anthropic key.
+which already has the GitHub PAT and auth credential set.
 
 Usage:
   python eval/run_eval.py [URL] [PROMPTS_FILE]
@@ -90,6 +95,7 @@ def evaluate_one(entry: dict, response: dict) -> dict:
     return {
         "category": category,
         "prompt": entry["prompt"],
+        "purpose": entry.get("purpose", ""),
         "expected": expected,
         "actual_skill": actual_skill,
         "actual_status": actual_status,
@@ -122,7 +128,7 @@ def write_report(results: list[dict], url: str, out_dir: Path) -> Path:
         f.write("## Per-category precision\n\n")
         f.write("| Category | Pass | Total | Precision |\n")
         f.write("|---|---:|---:|---:|\n")
-        for cat in ("trigger", "ambiguous", "safety"):
+        for cat in ("single", "compound", "misleading"):
             b = by_cat.get(cat, {"passed": 0, "total": 0})
             prec = (b["passed"] / b["total"]) if b["total"] else 0.0
             f.write(f"| {cat} | {b['passed']} | {b['total']} | {prec:.0%} |\n")
@@ -137,12 +143,16 @@ def write_report(results: list[dict], url: str, out_dir: Path) -> Path:
                 f"`{r['expected']}` | `{r['actual_skill']}` | "
                 f"`{r['actual_status']}` | {mark} |\n"
             )
-        # Misses block — useful when revising descriptions
+        # Misses block — useful when revising descriptions or eval prompts.
+        # Includes each entry's `purpose` so the reader can see what the test
+        # was checking without going back to prompts.jsonl.
         misses = [r for r in results if not r["passed"]]
         if misses:
-            f.write("\n## Misses (for description revision)\n\n")
+            f.write("\n## Misses\n\n")
             for r in misses:
                 f.write(f"- **[{r['category']}]** prompt: {r['prompt']!r}\n")
+                if r.get("purpose"):
+                    f.write(f"  - purpose: {r['purpose']}\n")
                 f.write(f"  - expected `{r['expected']}`, got skill=`{r['actual_skill']}` status=`{r['actual_status']}`\n")
 
     return out_file
@@ -206,15 +216,18 @@ def main() -> int:
         if r["passed"]:
             b["passed"] += 1
     print("\nSummary:")
-    for cat in ("trigger", "ambiguous", "safety"):
+    for cat in ("single", "compound", "misleading"):
         b = by_cat.get(cat, {"passed": 0, "total": 0})
         prec = (b["passed"] / b["total"]) if b["total"] else 0.0
         print(f"  {cat:10s}  {b['passed']}/{b['total']}  {prec:.0%}")
 
-    # Exit non-zero if trigger precision is below the 0.85 target — useful in CI
-    trigger_b = by_cat.get("trigger", {"passed": 0, "total": 0})
-    trigger_prec = (trigger_b["passed"] / trigger_b["total"]) if trigger_b["total"] else 0.0
-    return 0 if trigger_prec >= 0.85 else 1
+    # Exit non-zero if single-trigger precision is below the 0.85 target — useful in CI.
+    # We gate on the `single` category because that's the most direct measure of
+    # description-level routing precision; compound and misleading test broader
+    # behaviours where a partial miss isn't necessarily a description problem.
+    single_b = by_cat.get("single", {"passed": 0, "total": 0})
+    single_prec = (single_b["passed"] / single_b["total"]) if single_b["total"] else 0.0
+    return 0 if single_prec >= 0.85 else 1
 
 
 if __name__ == "__main__":
