@@ -375,12 +375,38 @@ def _gh_env() -> dict[str, str]:
     return {**os.environ, "GH_TOKEN": GITHUB_TOKEN}
 
 
-def _next_release_tag() -> str:
-    """Next patch-bump from the highest existing `vMAJOR.MINOR.PATCH` tag.
+def _pick_next_release_tag(refs: Any) -> str:
+    """Pure version-picking kernel: given whatever `gh api ... /git/refs/tags`
+    returned (a list of `{"ref": "refs/tags/...", ...}` dicts in the happy
+    case, anything else otherwise), return the next `vMAJOR.MINOR.PATCH` to
+    push.
 
-    Falls back to v0.1.0 when no semver-shaped tag exists yet, so the very
-    first pipeline run on a brand-new repo still gets a tag to push.
+    Falls back to `v0.1.0` on every degenerate input (None, non-list, no
+    semver-shaped tag) so the very first pipeline run on a brand-new repo
+    still gets a tag — the caller doesn't have to special-case "no tags
+    yet" vs "gh returned garbage".
+
+    Extracted from `_next_release_tag` so it can be unit-tested without
+    standing up a real gh subprocess.
     """
+    if not isinstance(refs, list):
+        return "v0.1.0"
+    versions: list[tuple[int, int, int]] = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        name = ref.get("ref", "").removeprefix("refs/tags/")
+        m = _VERSION_RE.match(name)
+        if m:
+            versions.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    if not versions:
+        return "v0.1.0"
+    major, minor, patch = max(versions)
+    return f"v{major}.{minor}.{patch + 1}"
+
+
+def _next_release_tag() -> str:
+    """Query existing tags via gh api, delegate to the pure kernel."""
     or_ = _owner_repo()
     if or_ is None:
         return "v0.1.0"
@@ -395,18 +421,7 @@ def _next_release_tag() -> str:
         refs = json.loads(result.stdout)
     except json.JSONDecodeError:
         return "v0.1.0"
-    if not isinstance(refs, list):
-        return "v0.1.0"
-    versions: list[tuple[int, int, int]] = []
-    for ref in refs:
-        name = ref.get("ref", "").removeprefix("refs/tags/") if isinstance(ref, dict) else ""
-        m = _VERSION_RE.match(name)
-        if m:
-            versions.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
-    if not versions:
-        return "v0.1.0"
-    major, minor, patch = max(versions)
-    return f"v{major}.{minor}.{patch + 1}"
+    return _pick_next_release_tag(refs)
 
 
 def _branch_head_sha(branch: str) -> str | None:

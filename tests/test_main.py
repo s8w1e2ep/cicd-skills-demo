@@ -347,6 +347,108 @@ def test_run_skill_known_name_passes_through(configured, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Tag-bump pure helpers
+# ---------------------------------------------------------------------------
+
+
+def test_pick_next_release_tag_empty_input(configured):
+    """No tags yet → start at v0.1.0. The first pipeline run on a brand-new
+    repo must still produce a pushable tag."""
+    assert configured._pick_next_release_tag([]) == "v0.1.0"
+
+
+def test_pick_next_release_tag_handles_non_list(configured):
+    """gh sometimes returns an error object instead of an array (e.g. when
+    the repo has no /git/refs/tags resource yet on a fresh repo). Anything
+    that isn't a list falls back to v0.1.0 rather than raising."""
+    assert configured._pick_next_release_tag(None) == "v0.1.0"
+    assert configured._pick_next_release_tag({"message": "Not Found"}) == "v0.1.0"
+    assert configured._pick_next_release_tag("not json") == "v0.1.0"
+
+
+def test_pick_next_release_tag_picks_max_and_bumps_patch(configured):
+    """Highest semver wins, patch increments. Order in the list must not
+    matter — we don't trust gh to sort."""
+    refs = [
+        {"ref": "refs/tags/v0.1.0"},
+        {"ref": "refs/tags/v0.2.5"},
+        {"ref": "refs/tags/v0.1.7"},
+    ]
+    assert configured._pick_next_release_tag(refs) == "v0.2.6"
+
+
+def test_pick_next_release_tag_ignores_non_semver_tags(configured):
+    """Tags like `latest`, `release-2026Q2`, `v1` (two-part) shouldn't
+    confuse the picker — only `vMAJOR.MINOR.PATCH` counts."""
+    refs = [
+        {"ref": "refs/tags/latest"},
+        {"ref": "refs/tags/release-2026Q2"},
+        {"ref": "refs/tags/v1"},
+        {"ref": "refs/tags/v0.1.0-rc1"},
+        {"ref": "refs/tags/v0.1.3"},
+    ]
+    assert configured._pick_next_release_tag(refs) == "v0.1.4"
+
+
+def test_pick_next_release_tag_only_non_semver_falls_back(configured):
+    """Repo has tags but none are semver-shaped — same fallback as empty."""
+    refs = [
+        {"ref": "refs/tags/latest"},
+        {"ref": "refs/tags/v1"},  # missing minor + patch
+    ]
+    assert configured._pick_next_release_tag(refs) == "v0.1.0"
+
+
+def test_pick_next_release_tag_skips_malformed_entries(configured):
+    """A None or non-dict inside the list shouldn't take down the picker —
+    skip it and keep going."""
+    refs = [
+        None,
+        "garbage",
+        {"ref": "refs/tags/v0.5.0"},
+        42,
+    ]
+    assert configured._pick_next_release_tag(refs) == "v0.5.1"
+
+
+def test_pick_next_release_tag_handles_major_minor_rollover(configured):
+    """No special-casing — patch always increments, even when MINOR is huge."""
+    refs = [{"ref": "refs/tags/v2.99.99"}]
+    assert configured._pick_next_release_tag(refs) == "v2.99.100"
+
+
+def test_owner_repo_parses_https_url(configured, monkeypatch):
+    """The standard demo URL form."""
+    monkeypatch.setattr(configured, "DEMO_REPO_URL", "https://github.com/octo/demo")
+    assert configured._owner_repo() == ("octo", "demo")
+
+
+def test_owner_repo_strips_dot_git_and_trailing_slash(configured, monkeypatch):
+    """Both common variants of the same URL."""
+    for url in (
+        "https://github.com/octo/demo.git",
+        "https://github.com/octo/demo/",
+        "https://github.com/octo/demo.git/",
+    ):
+        monkeypatch.setattr(configured, "DEMO_REPO_URL", url)
+        assert configured._owner_repo() == ("octo", "demo"), f"failed for {url}"
+
+
+def test_owner_repo_returns_none_for_non_github(configured, monkeypatch):
+    """SSH form, GitLab, or anything that's not a github.com https URL.
+    The pipeline should treat the tag-bump as unsupported rather than
+    crash on a regex miss."""
+    for url in (
+        "git@github.com:octo/demo",
+        "https://gitlab.com/octo/demo",
+        "https://example.com/repo",
+        "",
+    ):
+        monkeypatch.setattr(configured, "DEMO_REPO_URL", url)
+        assert configured._owner_repo() is None, f"should reject {url!r}"
+
+
 def test_authed_clone_url_inserts_pat(configured):
     """The clone URL must embed the token via x-access-token so git push
     works without configuring a credential helper inside the container."""
