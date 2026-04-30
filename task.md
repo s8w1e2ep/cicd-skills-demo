@@ -22,7 +22,7 @@ Goal: prove the loop works for `lint-and-test` before scaling.
 - [x] `.claude/skills/lint-and-test/SKILL.md` — frontmatter (pushy description) + body sections (when to use, steps, idempotency check, output format)
 - [x] `.claude/skills/lint-and-test/assets/lint-and-test.node.yml` — static template
 - [x] `.claude/skills/lint-and-test/assets/lint-and-test.python.yml` — static template
-- [x] `.claude/skills/lint-and-test/evals/evals.json` — 2 entries (happy + idempotency)
+- [x] `.claude/skills/lint-and-test/scripts/` — four shell helpers (`compare_yaml.sh`, `switch_to_demo_branch.sh`, `ensure_pr.sh`, `list_workflow_runs.sh`); per-Skill copy is the skill-creator-conformant layout
 - [x] `server/main.py` — both `/run` (agent routing) and `/run/skill/{name}` (forced) shipped together since the SDK exposes both at once
 - [x] `Dockerfile` written; build verified during Zeabur deploy
 - [x] Smoke test against demo repo — `lint-and-test` Skill `status: created`, commit `c3553a7`, workflow run `25123883168` succeeded
@@ -31,7 +31,7 @@ Goal: prove the loop works for `lint-and-test` before scaling.
 
 ## Phase 2 — Remaining three Skills  (≈ 25 min)
 
-For each Skill: SKILL.md + assets + evals/evals.json (≥ 2 entries).
+For each Skill: SKILL.md + assets/ + scripts/ (per-Skill copy of the four helpers).
 
 - [x] `.claude/skills/dependency-audit/` (npm audit + pip-audit)
 - [x] `.claude/skills/security-scan/` (gitleaks + semgrep, SARIF to Security tab)

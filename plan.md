@@ -59,8 +59,11 @@ Per official skill-creator + claude-agent-sdk:
 ├── assets/              # workflow YAML templates per language stack
 │   ├── <name>.node.yml
 │   └── <name>.python.yml
-└── evals/
-    └── evals.json
+└── scripts/             # git/gh helpers the body invokes via Bash
+    ├── compare_yaml.sh
+    ├── switch_to_demo_branch.sh
+    ├── ensure_pr.sh
+    └── list_workflow_runs.sh
 ```
 
 Path is fixed by SDK discovery: `setting_sources=["project"]` loads from `<cwd>/.claude/skills/`. Demo repo is this project repo, so the scratch clone naturally has `.claude/skills/`.
@@ -98,7 +101,7 @@ Single file, vanilla JS. 6 preset chips. Result pane parses returned JSON, rende
 - For each entry: `POST /run` → record returned `skill` (or `refused`) → compare to `expected_skill` → per-category precision.
 - Writes `eval/results/<timestamp>.md`.
 
-Per-skill `evals.json` files exist but are aspirational in v1 — graders can run them manually; we don't build a runner for them in the time budget. Documented as a follow-up.
+A per-Skill *execution-correctness* eval (does each Skill produce the right files / branch state / JSON shape?) is out of scope for v1. The routing eval above is the only automated check.
 
 ### 2.5 Deploy
 
@@ -110,7 +113,7 @@ Per-skill `evals.json` files exist but are aspirational in v1 — graders can ru
 | Decision | Alternative | Why |
 |---|---|---|
 | Pure-markdown Skills (no custom Python helpers) | Wrap each Skill in a deterministic Python program | Idiomatic per skill-creator; lets the AI-collaboration evidence show; idempotency provided by an explicit semantic-compare step inside SKILL.md, not by hiding logic from Claude |
-| Inline `python3 -c "…yaml.safe_load…"` for compare | Ship `scripts/compare_yaml.py` per skill | One-liner is short enough; avoids per-skill duplication; SKILL.md is more readable when the check is visible |
+| `scripts/compare_yaml.sh` per Skill (duplicated 4×) | One inline `python3 -c …` in SKILL.md, or one centralised `.claude/scripts/` | Conforms to skill-creator's "Skills are self-contained" structure; cost is 4 byte-identical copies a fix has to be applied to. We tried centralisation and rolled it back — see `prompts/02-skill-creator-alignment.md` |
 | Single shared `claude/ci-demo` branch + persistent PR | Per-skill branch / fresh PR | Demo cleanliness; one PR shows all four contributions; idempotency trivial |
 | Templates in `assets/` per language stack | LLM generates YAML on the fly | Idempotency requires byte-deterministic output. Templates eliminate LLM drift |
 | Server enforces repo allowlist (one demo repo only) | Trust the agent | Hard wall — even a jailbroken agent cannot touch other repos |
@@ -118,7 +121,7 @@ Per-skill `evals.json` files exist but are aspirational in v1 — graders can ru
 | Single fine-grained PAT | GitHub App OAuth | OAuth + `workflows` scope is 2+ hours; documented as production-migration item |
 | Synchronous API, return run URL (don't poll) | Async + SSE | The run lives 1–5 min on GitHub; linking out is honest and saves 30+ min |
 | 15-prompt routing eval | 50–100 prompts | Optimising for category coverage, not statistical power |
-| Per-skill `evals/evals.json` exists but no runner in v1 | Build a per-skill runner too | Out of time budget; stub the data, document as follow-up |
+| No execution-correctness eval (only routing eval) | Build a per-Skill correctness runner | Out of time budget; the routing eval already covers the trigger-precision scoring axis |
 
 ## 4. Risks
 

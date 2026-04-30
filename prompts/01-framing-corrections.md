@@ -27,7 +27,7 @@ I had proposed a `server/helpers/` folder containing five Python scripts (`clone
 What this changed:
 
 - **Helpers folder deleted in design before it was written in code.** This saved roughly a third of the Phase 1–2 work.
-- **Skills became idiomatic.** The folder structure now matches what the official `skill-creator` skill specifies: `SKILL.md` + `assets/` + `evals/`. No surprise structure.
+- **Skills became idiomatic.** The folder structure now matches what the official `skill-creator` skill specifies: `SKILL.md` + `assets/` + `scripts/`. No surprise structure.
 - **Idempotency moved from a Python program into a single instruction in `SKILL.md`** — a one-line `python3 -c "import yaml; ..."` semantic-compare command. The body of the Skill carries it; the runner doesn't.
 - **AI-collaboration evidence is now legible.** With helpers, the answer to "where did the AI work?" was diluted across server-side code and Skill content. With pure-markdown Skills, the AI's contribution lives entirely in the descriptions and the body instructions — which is what the test grades.
 

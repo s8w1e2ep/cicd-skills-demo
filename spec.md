@@ -56,13 +56,16 @@ Each Skill produces exactly one file under `.github/workflows/` of the current r
 ├── SKILL.md             # required: frontmatter + body (< 500 lines)
 ├── assets/              # workflow YAML templates, one per language stack
 │   └── *.yml
-└── evals/
-    └── evals.json       # per-skill evals (skill execution correctness)
+└── scripts/             # git/gh helpers the body invokes via Bash
+    ├── compare_yaml.sh
+    ├── switch_to_demo_branch.sh
+    ├── ensure_pr.sh
+    └── list_workflow_runs.sh
 ```
 
 The `.claude/skills/` path is required by `claude-agent-sdk` — when `setting_sources=["project"]` is set, the SDK auto-discovers Skills under `<cwd>/.claude/skills/`.
 
-`scripts/` and `references/` are not used in v1 — SKILL.md stays compact, and the YAML semantic-compare we need is a one-line `python3 -c …` invocation that fits inline in the body.
+`references/` is not used in v1. The four scripts are byte-identical across the four Skills' `scripts/` directories — a deliberate cost of conforming to skill-creator's "Skills are self-contained" structure (a centralised `.claude/scripts/` was tried and rolled back).
 
 ### 4.3 Inputs (implicit)
 
@@ -154,25 +157,14 @@ Two layers:
 
 `eval/run_eval.py` posts each prompt to `/run`, compares `skill` field to `expected_skill`, computes per-category precision, writes `eval/results/<timestamp>.md`.
 
-### 5.2 Per-skill evals
+### 5.2 Execution-correctness evals
 
-Each `.claude/skills/<name>/evals/evals.json` follows the official schema:
-
-```json
-{
-  "skill_name": "lint-and-test",
-  "evals": [
-    {"id": 1, "prompt": "set up CI for tests", "expected_output": "creates lint-and-test.yml on claude/ci-demo, status=created", "files": []}
-  ]
-}
-```
-
-≥ 2 entries per skill, including one idempotency case (same input twice → second run `no_change`).
+Out of scope for v1. The global routing eval scores *which Skill fires*; verifying *what each Skill produced* (right files written, right branch state, right JSON shape) needs a second harness that is not built here. See `prompts/05-eval-prompt-design.md` for the deferred-stage-2 discussion.
 
 ## 6. Acceptance criteria
 
 - [ ] Four `SKILL.md` files with distinct, "pushy" descriptions following skill-creator guidelines (each describes WHAT and WHEN to use).
-- [ ] Each Skill has `assets/*.yml` templates and `evals/evals.json` (≥ 2 entries).
+- [ ] Each Skill has `assets/*.yml` templates and `scripts/*.sh` (the four shared helpers, copied per Skill).
 - [ ] For each Skill, `/run` produces a real commit on `claude/ci-demo`, opens/updates the PR, triggers a GitHub Actions run.
 - [ ] Same call repeated → `status: no_change`, no new commits.
 - [ ] At least one destructive prompt verifiably refused (`status: refused`, `refused.reason` non-empty).
