@@ -14,27 +14,29 @@ WebFetch
   prompt: Extract the complete guidelines for creating a Skill: required
           frontmatter fields, description writing rules, when to use
           references vs inline content, recommended folder structure
-          (references/, scripts/, assets/, evals/), output format
-          conventions, and any rules about "trigger phrases" or "pushy
-          descriptions". Quote exact phrasing where possible.
+          (references/, scripts/, assets/), output format conventions,
+          and any rules about "trigger phrases" or "pushy descriptions".
+          Quote exact phrasing where possible.
 ```
 
 ## What changed in our design after reading
 
 | Before reading the guidelines | After |
 |---|---|
-| Folder convention guessed: `template.yml.j2`, `inputs.json` | Use the official names: `assets/<name>.yml`, `evals/evals.json` |
+| Folder convention guessed: `template.yml.j2`, `inputs.json` | Use the official names: `assets/<name>.yml` for templates, `scripts/*.sh` for the git/gh helpers each Skill body invokes |
 | `description` written like a docstring ("Sets up GitHub Actions workflow...") | "Pushy" description following the explicit guidance: skill-creator says "Claude has a tendency to undertrigger skills... please make the skill descriptions a little bit 'pushy'." Description was rewritten to start with a verb phrase, enumerate trigger contexts, and include an explicit "Use this skill whenever the user wants ... — even if they don't explicitly say 'workflow' or 'GitHub Actions'." |
 | Output format: vague "return JSON" | Explicit fenced-JSON template at the end of every `SKILL.md` body, with `status` enum semantics and a no-change example. The grader's exact phrasing — "ALWAYS use this exact template" — is followed. |
-| `evals/` was a single project-level `prompts.jsonl` | Two layers: per-skill `evals/evals.json` (skill execution correctness) plus project-level `eval/prompts.jsonl` (routing precision). Per-skill evals follow the official schema (`skill_name`, `evals[].id`, `prompt`, `expected_output`, `files`). |
-| `SKILL.md` was a long, unstructured document | Strict body sections: When to use, Steps, Idempotency check, Output format. Body kept under 200 lines well within the 500-line target. |
-| Considered using `scripts/` and `references/` | Rejected for v1: SKILL.md is short enough, and the only "deterministic" code (semantic YAML compare) fits inline as a `python3 -c …` one-liner. Adding `scripts/` would have re-introduced the helpers anti-pattern from `01-framing-corrections.md`. |
+| Routing eval: nothing | Project-level `eval/prompts.jsonl` (16 entries: 9 trigger / 4 ambiguous / 3 safety) scored by `eval/run_eval.py`. skill-creator mentions writing test prompts but does not prescribe a per-Skill `evals/` folder, so we use a single project-level surface. |
+| `SKILL.md` was a long, unstructured document | Strict body sections: When to use, Scripts, Steps, Output format. Body kept well under the 500-line target. |
+| Considered using `references/` | Rejected: SKILL.md fits comfortably in budget without paging documentation. Adding `references/` for a 100-line body is indirection without value. |
+
+## A correction we shipped later
+
+An earlier version of this file also claimed each Skill should have an `evals/evals.json` following an "official schema." That was a misread on my part — skill-creator's structure section lists three optional folders (`scripts/`, `references/`, `assets/`), no `evals/`. We had four `evals/evals.json` files for a while; they conformed to no consumer (neither our routing eval nor any harness used them) and they padded the Skill folders past what skill-creator specifies. They were deleted in a follow-up cleanup pass.
+
+A separate trade-off in the same pass: the four `scripts/*.sh` helpers had been *centralised* under `.claude/scripts/` for DRY. We rolled that back to per-Skill `scripts/` directories — strict skill-creator conformance over DRY. The cost is four byte-identical copies a fix has to be applied to; the benefit is that each Skill folder is self-contained and could be lifted into another repo as-is.
 
 ## What I deliberately did NOT change
 
-- Skipped `scripts/` and `references/` folders even though they are in the official structure. Both are optional, and using them when SKILL.md is already short would have added indirection without value.
+- Skipped `references/` even though it's in the official structure. SKILL.md is short enough; paging out wouldn't earn its complexity.
 - Did not enable `compatibility:` frontmatter. The README says it's "rarely needed."
-
-## What this implies for v2
-
-When the eval harness measures trigger precision, the description language is the lever. skill-creator's guidance on "pushy" wording is a starting heuristic — the empirical test is whether `lint-and-test`'s description correctly fires on prompts like "is this safe to ship?" (it shouldn't — that's `security-scan`'s territory). If precision is below the 0.85 target, this is the file to revise, not the body or the templates.

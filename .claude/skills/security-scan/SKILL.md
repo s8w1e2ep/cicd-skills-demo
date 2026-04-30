@@ -11,14 +11,14 @@ Writes (or updates) `.github/workflows/security-scan.yml` in the current repo, c
 
 The workflow is language-agnostic — semgrep auto-detects what's in the repo, gitleaks pattern-matches independent of language. There is no per-stack template branching here.
 
-## Shared scripts
+## Scripts
 
-The git/gh operations are shared across all four CI/CD Skills and live under `.claude/scripts/`. The Skill body invokes them rather than inlining the commands so that a fix to the idempotency / PR / branch logic touches one file, not four. Available:
+The git/gh operations live under this Skill's own `scripts/` directory. The Skill body invokes them rather than inlining shell commands. Available:
 
-- `.claude/scripts/compare_yaml.sh <a> <b>` — semantic-equal compare; prints `SAME` or `DIFF`
-- `.claude/scripts/switch_to_demo_branch.sh` — fetch + checkout `claude/ci-demo`, fork from HEAD if remote missing
-- `.claude/scripts/ensure_pr.sh` — print existing PR URL, or create a new PR if none exists
-- `.claude/scripts/list_workflow_runs.sh <filename.yml>` — JSON list of last 5 runs for one workflow
+- `.claude/skills/security-scan/scripts/compare_yaml.sh <a> <b>` — semantic-equal compare; prints `SAME` or `DIFF`
+- `.claude/skills/security-scan/scripts/switch_to_demo_branch.sh` — fetch + checkout `claude/ci-demo`, fork from HEAD if remote missing
+- `.claude/skills/security-scan/scripts/ensure_pr.sh` — print existing PR URL, or create a new PR if none exists
+- `.claude/skills/security-scan/scripts/list_workflow_runs.sh <filename.yml>` — JSON list of last 5 runs for one workflow
 
 ## Steps
 
@@ -31,13 +31,13 @@ The git/gh operations are shared across all four CI/CD Skills and live under `.c
 4. **Idempotency check.** If the file existed in step 3:
 
    ```bash
-   bash .claude/scripts/compare_yaml.sh .github/workflows/security-scan.yml /tmp/new-workflow.yml
+   bash .claude/skills/security-scan/scripts/compare_yaml.sh .github/workflows/security-scan.yml /tmp/new-workflow.yml
    ```
 
    If the output is `SAME`:
    - Do not write, do not commit, do not push.
    - Get the previous commit URL: `git log -1 --format="%H" -- .github/workflows/security-scan.yml` and the repo URL via `git config --get remote.origin.url`.
-   - Get the existing PR URL via `bash .claude/scripts/ensure_pr.sh`.
+   - Get the existing PR URL via `bash .claude/skills/security-scan/scripts/ensure_pr.sh`.
    - Emit the JSON output with `status: "no_change"` and stop.
 
    If the output is `DIFF`, set `status: "updated"` and continue.
@@ -45,7 +45,7 @@ The git/gh operations are shared across all four CI/CD Skills and live under `.c
 5. **Switch to the demo branch.**
 
    ```bash
-   bash .claude/scripts/switch_to_demo_branch.sh
+   bash .claude/skills/security-scan/scripts/switch_to_demo_branch.sh
    ```
 
 6. **Write the workflow file.** Ensure `.github/workflows/` exists, then Write the contents of `/tmp/new-workflow.yml` to `.github/workflows/security-scan.yml`.
@@ -61,7 +61,7 @@ The git/gh operations are shared across all four CI/CD Skills and live under `.c
 8. **Ensure the PR exists.**
 
    ```bash
-   bash .claude/scripts/ensure_pr.sh
+   bash .claude/skills/security-scan/scripts/ensure_pr.sh
    ```
 
    Capture the printed URL as `pr_url` for the final JSON.
@@ -69,7 +69,7 @@ The git/gh operations are shared across all four CI/CD Skills and live under `.c
 9. **Read the resulting GitHub Actions runs.**
 
    ```bash
-   bash .claude/scripts/list_workflow_runs.sh security-scan.yml
+   bash .claude/skills/security-scan/scripts/list_workflow_runs.sh security-scan.yml
    ```
 
 10. **Emit the output JSON.** See "Output format" below.

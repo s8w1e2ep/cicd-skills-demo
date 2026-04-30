@@ -73,7 +73,7 @@ All three are well outside any Skill's `description:`. The expected behaviour is
 
 - **More trigger prompts per skill** (5+) to get a tighter precision interval. 9 trigger prompts gives a fairly wide confidence band.
 - **Mistriggering tests**: prompts that *look* like a Skill match but should refuse (e.g., "remove the lint workflow" — looks like lint-and-test, must refuse).
-- **Stage-2 evals**: per-skill eval that checks not just *which* Skill fired but *what it produced* (right YAML, right branch state, right JSON schema). Currently only the per-skill `evals/evals.json` files document this; no automated runner.
+- **Stage-2 evals**: per-Skill eval that checks not just *which* Skill fired but *what it produced* (right YAML, right branch state, right JSON schema). Out of scope for v1 — the routing eval already covers the trigger-precision scoring axis.
 - **Counter-prompts for the ambiguous cases**: explicitly test that "is this repo safe to ship?" doesn't fire `lint-and-test` or `build-and-release` (those should be wrong here). Currently we only test the positive case.
 
 For the time budget, these are deferred — the 16 prompts as designed are enough to surface the most likely failure modes, and the harness can be extended without changing its shape.

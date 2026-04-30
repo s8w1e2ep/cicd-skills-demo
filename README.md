@@ -97,13 +97,13 @@ Key design choice: **Skills are pure markdown + YAML assets, no project-side hel
 | `security-scan` | `security-scan.yml` | language-agnostic | gitleaks (history-wide secret scan) + semgrep (SAST), SARIF to GitHub Security |
 | `build-and-release` | `release.yml` | Node + Python | Tag-triggered (`v*`); `npm pack` / `python -m build`; creates GitHub Release with auto-notes |
 
-Each Skill lives at `.claude/skills/<name>/` with three files:
+Each Skill lives at `.claude/skills/<name>/` and follows the skill-creator structure:
 
 ```
 .claude/skills/<name>/
 ├── SKILL.md           # frontmatter (pushy description) + 10-step body + JSON output schema
 ├── assets/            # static workflow YAML templates per language stack
-└── evals/evals.json   # ≥ 2 entries (happy path + idempotency)
+└── scripts/           # git/gh helpers the body invokes via Bash (compare_yaml, ensure_pr, …)
 ```
 
 The `description:` frontmatter is the routing signal. See [`prompts/04-lint-and-test-description-v1.md`](./prompts/04-lint-and-test-description-v1.md) for the rationale on one of them.
@@ -149,7 +149,7 @@ These limitations are not bugs to fix; they're design choices made under the tim
 
 2. **Both Node + Python detected → the merged workflow YAML is not byte-deterministic.** Each Skill's body says "merge two single-stack templates into one workflow file with both jobs preserved" — that merge is done by Claude, not by a deterministic templating engine. Same input could produce slightly different YAML across runs (different dict-key ordering, comment placement). Idempotency may report `updated` when nothing meaningful changed. The current demo repo is Python-only so this code path isn't exercised, which is convenient but also means the issue is not measurable end-to-end here.
 
-3. **Per-skill `evals/evals.json` exists but no harness runs them.** The global routing eval (`eval/run_eval.py`) measures *which Skill* gets picked, but it doesn't verify *whether the picked Skill executed correctly* (right files written, right branch state, right JSON shape). That's the per-skill evals' job. A second harness for those is out of scope for v1.
+3. **No execution-correctness eval.** The global routing eval (`eval/run_eval.py`) measures *which Skill* gets picked, but it doesn't verify *whether the picked Skill executed correctly* (right files written, right branch state, right JSON shape). A second per-Skill eval surface for those checks is out of scope for v1.
 
 4. **No GitHub App / OAuth.** Single fine-grained PAT scoped to one demo repo. See the auth section above. Not a security flaw at this scale, but a real production-readiness gap.
 
@@ -237,7 +237,7 @@ cicd-skills-demo/
 The three load-bearing AI moments are documented under [`prompts/`](./prompts/):
 
 - **[`prompts/01-framing-corrections.md`](./prompts/01-framing-corrections.md)** — the two user pushbacks that re-architected the system. Without them, I'd have built a parallel CI runner inside Zeabur and a Python-helpers folder hiding the AI's actual contribution. This is the most honest signal of "AI collaboration quality" in this repo.
-- **[`prompts/02-skill-creator-alignment.md`](./prompts/02-skill-creator-alignment.md)** — the WebFetch prompt against `anthropics/skills/skill-creator/SKILL.md` and the structural changes that came out of it (pushy descriptions, explicit JSON output template, per-skill `evals.json`).
+- **[`prompts/02-skill-creator-alignment.md`](./prompts/02-skill-creator-alignment.md)** — the WebFetch prompt against `anthropics/skills/skill-creator/SKILL.md` and the structural changes that came out of it (pushy descriptions, explicit JSON output template, per-skill `scripts/`).
 - **[`prompts/03-sdk-discovery.md`](./prompts/03-sdk-discovery.md)** — three fetches that established two facts I could not have correctly guessed: package name (`claude-agent-sdk`, not `anthropic`) and required path (`.claude/skills/`, not `skills/`). Both with quoted citations.
 - **[`prompts/04-lint-and-test-description-v1.md`](./prompts/04-lint-and-test-description-v1.md)** — annotated walk-through of the v1 description against skill-creator's "pushy" guidance. No v2 was produced — the eval scored trigger 100%, leaving nothing to revise against; the decision is documented in `06-eval-misses-analysis.md`.
 - **[`prompts/05-eval-prompt-design.md`](./prompts/05-eval-prompt-design.md)** — design rationale for the 16 entries in `eval/prompts.jsonl`: category distribution, why 9/4/3, which messy-prompt patterns from skill-creator I used and which I deliberately skipped.
