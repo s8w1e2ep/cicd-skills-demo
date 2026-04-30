@@ -273,11 +273,12 @@ def test_run_with_trailing_slash_in_repo_url_still_accepts(configured, monkeypat
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_returns_503_when_not_configured(unconfigured):
-    """Same fail-fast behaviour as /run — env validation runs before we open
-    the SSE stream."""
+def test_pipeline_accepts_empty_body(unconfigured):
+    """The pipeline endpoint builds its own prompts internally — clients
+    should be able to POST {} without a prompt field. With env unset we
+    expect 503 (env validation runs before any body-derived logic)."""
     client = TestClient(unconfigured.app)
-    r = client.post("/run/cicd-pipeline", json={"prompt": "ignored"})
+    r = client.post("/run/cicd-pipeline", json={})
     assert r.status_code == 503
     assert "missing env var" in r.json()["detail"]
 
@@ -288,7 +289,7 @@ def test_pipeline_rejects_non_allowlisted_repo_url(configured):
     client = TestClient(configured.app)
     r = client.post(
         "/run/cicd-pipeline",
-        json={"prompt": "x", "repo_url": "https://github.com/elsewhere/repo"},
+        json={"repo_url": "https://github.com/elsewhere/repo"},
     )
     assert r.status_code == 400
     assert "allowlist" in r.json()["detail"]
