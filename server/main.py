@@ -14,13 +14,15 @@ deleted on the way out.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -334,7 +336,7 @@ def _generate_pipeline_branch() -> str:
     sort order monotonic regardless of where the server is running; the hex
     suffix avoids collisions when two clicks land in the same second.
     """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     short = secrets.token_hex(3)
     return f"demo-{ts}-{short}"
 
@@ -349,6 +351,145 @@ def _branch_url(branch: str) -> str | None:
     """Map an https GitHub repo URL + branch to a viewable tree URL."""
     if DEMO_REPO_URL.startswith("https://github.com/"):
         return f"{DEMO_REPO_URL}/tree/{branch}"
+    return None
+
+
+_OWNER_REPO_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$")
+_VERSION_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
+
+def _owner_repo() -> tuple[str, str] | None:
+    """Parse owner + repo from DEMO_REPO_URL. None when the env-set URL isn't
+    in the standard GitHub https form (e.g. someone deployed against an SSH
+    URL); the caller must treat that as "tag-bump not supported here" rather
+    than abort the whole pipeline."""
+    m = _OWNER_REPO_RE.match(DEMO_REPO_URL)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _gh_env() -> dict[str, str]:
+    """gh CLI inherits the parent env. We override GH_TOKEN explicitly so the
+    pipeline-side gh calls authenticate even if the process didn't have
+    GH_TOKEN at startup (the agent-tool subprocesses do, but those use a
+    different env-merge path)."""
+    return {**os.environ, "GH_TOKEN": GITHUB_TOKEN}
+
+
+def _next_release_tag() -> str:
+    """Next patch-bump from the highest existing `vMAJOR.MINOR.PATCH` tag.
+
+    Falls back to v0.1.0 when no semver-shaped tag exists yet, so the very
+    first pipeline run on a brand-new repo still gets a tag to push.
+    """
+    or_ = _owner_repo()
+    if or_ is None:
+        return "v0.1.0"
+    owner, repo = or_
+    result = subprocess.run(
+        ["gh", "api", "--paginate", f"/repos/{owner}/{repo}/git/refs/tags"],
+        capture_output=True, text=True, env=_gh_env(),
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return "v0.1.0"
+    try:
+        refs = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return "v0.1.0"
+    if not isinstance(refs, list):
+        return "v0.1.0"
+    versions: list[tuple[int, int, int]] = []
+    for ref in refs:
+        name = ref.get("ref", "").removeprefix("refs/tags/") if isinstance(ref, dict) else ""
+        m = _VERSION_RE.match(name)
+        if m:
+            versions.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    if not versions:
+        return "v0.1.0"
+    major, minor, patch = max(versions)
+    return f"v{major}.{minor}.{patch + 1}"
+
+
+def _branch_head_sha(branch: str) -> str | None:
+    """Read origin/<branch>'s tip SHA via the GitHub API."""
+    or_ = _owner_repo()
+    if or_ is None:
+        return None
+    owner, repo = or_
+    result = subprocess.run(
+        ["gh", "api", f"/repos/{owner}/{repo}/git/ref/heads/{branch}",
+         "--jq", ".object.sha"],
+        capture_output=True, text=True, env=_gh_env(),
+    )
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _create_release_tag(tag: str, sha: str) -> tuple[str | None, str | None]:
+    """Create a lightweight tag at `sha`. Returns (release_url, error).
+
+    Lightweight (vs annotated) is fine for the demo — the GitHub Release
+    that the workflow creates carries the metadata; the tag itself just
+    needs to exist + point at the right SHA + match the v* trigger pattern.
+    """
+    or_ = _owner_repo()
+    if or_ is None:
+        return None, "DEMO_REPO_URL is not a parseable github.com URL"
+    owner, repo = or_
+    result = subprocess.run(
+        ["gh", "api", f"/repos/{owner}/{repo}/git/refs",
+         "-X", "POST",
+         "-f", f"ref=refs/tags/{tag}",
+         "-f", f"sha={sha}"],
+        capture_output=True, text=True, env=_gh_env(),
+    )
+    if result.returncode != 0:
+        msg = (result.stderr.strip() or result.stdout.strip() or "unknown error")[:300]
+        return None, msg
+    return f"https://github.com/{owner}/{repo}/releases/tag/{tag}", None
+
+
+async def _wait_for_release_run(tag: str, attempts: int = 8, delay_s: float = 2.0) -> str | None:
+    """Poll for the build-and-release workflow run that the tag push just
+    triggered. Returns the run URL once `headBranch == tag`; gives up after
+    `attempts × delay_s` seconds (default 16s).
+
+    Why a polling loop instead of a single query: GitHub takes a moment to
+    schedule a run after a ref is created via the API. The first 1-2
+    queries usually return an older run or empty list, then the new one
+    appears. Capping the loop keeps the SSE stream from hanging forever
+    when the workflow doesn't fire (e.g., file missing on tagged commit).
+    """
+    or_ = _owner_repo()
+    if or_ is None:
+        return None
+    owner, repo = or_
+    for _ in range(attempts):
+        await asyncio.sleep(delay_s)
+        result = subprocess.run(
+            ["gh", "run", "list",
+             "--repo", f"{owner}/{repo}",
+             "--workflow", "build-and-release.yml",
+             "--limit", "5",
+             "--json", "databaseId,headBranch,event"],
+            capture_output=True, text=True, env=_gh_env(),
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+        try:
+            runs = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            continue
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            # Tag pushes surface in the run list with headBranch set to the
+            # tag name (without the refs/tags/ prefix).
+            if run.get("headBranch") == tag and run.get("event") == "push":
+                run_id = run.get("databaseId")
+                if run_id:
+                    return f"https://github.com/{owner}/{repo}/actions/runs/{run_id}"
     return None
 
 
@@ -439,6 +580,50 @@ async def run_cicd_pipeline(req: PipelineRequest) -> StreamingResponse:
                 first_pr_url = out["pr_url"]
                 break
 
+        # Tag-bump phase: push a fresh `vX.Y.Z+1` tag at the demo branch HEAD
+        # so the build-and-release workflow actually fires. Without this,
+        # build-and-release.yml is committed but never triggered (since it's
+        # tag-driven), and the demo can't show a green Release artifact for
+        # this run. We wait briefly for the run to appear so the UI can
+        # deep-link straight to it; the wait is bounded so a missing
+        # workflow doesn't stall the SSE stream.
+        tag_name: str | None = None
+        tag_url: str | None = None
+        release_run_url: str | None = None
+        tag_error: str | None = None
+        try:
+            head_sha = _branch_head_sha(branch_name)
+            if head_sha:
+                tag_name = _next_release_tag()
+                tag_url, tag_error = _create_release_tag(tag_name, head_sha)
+                if tag_url:
+                    yield _sse(
+                        "tag_pushed",
+                        {
+                            "tag": tag_name,
+                            "tag_url": tag_url,
+                            "sha": head_sha[:7],
+                        },
+                    )
+                    release_run_url = await _wait_for_release_run(tag_name)
+                    if release_run_url:
+                        yield _sse(
+                            "release_run_started",
+                            {"tag": tag_name, "run_url": release_run_url},
+                        )
+                else:
+                    yield _sse(
+                        "tag_failed",
+                        {"tag": tag_name, "error": tag_error or "tag push failed"},
+                    )
+            else:
+                yield _sse(
+                    "tag_failed",
+                    {"error": "could not resolve demo branch HEAD via gh api"},
+                )
+        except Exception as e:
+            yield _sse("tag_failed", {"error": f"{e.__class__.__name__}: {e}"})
+
         yield _sse(
             "done",
             {
@@ -446,6 +631,9 @@ async def run_cicd_pipeline(req: PipelineRequest) -> StreamingResponse:
                 "branch_url": _branch_url(branch_name),
                 "pr_url": first_pr_url,
                 "results": results,
+                "tag": tag_name,
+                "tag_url": tag_url,
+                "release_run_url": release_run_url,
             },
         )
 
