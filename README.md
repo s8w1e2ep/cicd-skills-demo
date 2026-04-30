@@ -34,7 +34,7 @@ The test prompt grades four axes. Here's where to verify each in the deployed sy
 | **Skill boundaries** | Click two preset chips back-to-back (e.g. lint-and-test then dependency-audit). Compare `skill_used` and `workflow_path` — one Skill = one YAML file, no overlap. |
 | **Auth & safety** | (a) Try a `repo_url` other than the configured one via `curl POST /run` — server rejects with HTTP 400. (b) Click the destructive preset — agent refuses. (c) Read the [`workflows`-scope auth caveat](#auth--safety) below. |
 | **Idempotency** | Click the same preset twice. Second response: `status: no_change`, no new commit on the PR. |
-| **Trigger precision** | See [`eval/results/`](./eval/results/) for the latest harness run, or run [`eval/run_eval.py`](./eval/run_eval.py) yourself against the live URL. 20 prompts split 12 single / 4 compound / 4 misleading; each carries a `purpose` field. |
+| **Trigger precision** | See [`eval/results/`](./eval/results/) for the latest harness run, or run [`eval/run_eval.py`](./eval/run_eval.py) yourself against the live URL. 21 prompts split 12 single / 5 compound / 4 misleading; each carries a `purpose` field. Compound uses `ALL:` matching — every listed Skill must fire. |
 
 ---
 
@@ -153,7 +153,7 @@ These limitations are not bugs to fix; they're design choices made under the tim
 
 4. **No GitHub App / OAuth.** Single fine-grained PAT scoped to one demo repo. See the auth section above. Not a security flaw at this scale, but a real production-readiness gap.
 
-5. **Eval set is small (20 prompts) by design.** Optimised for category coverage (single / compound / misleading) over statistical confidence. A precision figure across 12 single-trigger prompts has a non-trivial confidence interval. For "is this real progress?" you want ≥ 100 prompts.
+5. **Eval set is small (21 prompts) by design.** Optimised for category coverage (single / compound / misleading) over statistical confidence. A precision figure across 12 single-trigger prompts has a non-trivial confidence interval. For "is this real progress?" you want ≥ 100 prompts.
 
 6. **The release Skill writes a tag-triggered workflow, so smoke-testing it via the demo doesn't actually fire a run.** `workflow_runs` comes back as `[]` after creation — that's documented in the SKILL.md and in the `notes` field of the response, but it is a rougher demo than the other three.
 
@@ -240,7 +240,7 @@ The three load-bearing AI moments are documented under [`prompts/`](./prompts/):
 - **[`prompts/02-skill-creator-alignment.md`](./prompts/02-skill-creator-alignment.md)** — the WebFetch prompt against `anthropics/skills/skill-creator/SKILL.md` and the structural changes that came out of it (pushy descriptions, explicit JSON output template, per-skill `scripts/`).
 - **[`prompts/03-sdk-discovery.md`](./prompts/03-sdk-discovery.md)** — three fetches that established two facts I could not have correctly guessed: package name (`claude-agent-sdk`, not `anthropic`) and required path (`.claude/skills/`, not `skills/`). Both with quoted citations.
 - **[`prompts/04-lint-and-test-description-v1.md`](./prompts/04-lint-and-test-description-v1.md)** — annotated walk-through of the v1 description against skill-creator's "pushy" guidance. No v2 was produced — the eval scored trigger 100%, leaving nothing to revise against; the decision is documented in `06-eval-misses-analysis.md`.
-- **[`prompts/05-eval-prompt-design.md`](./prompts/05-eval-prompt-design.md)** — design rationale for the 20 entries in `eval/prompts.jsonl`: category distribution (12 single / 4 compound / 4 misleading), the `purpose` field on each entry, and which messy-prompt patterns from skill-creator I used and which I deliberately skipped.
+- **[`prompts/05-eval-prompt-design.md`](./prompts/05-eval-prompt-design.md)** — design rationale for the 21 entries in `eval/prompts.jsonl`: category distribution (12 single / 5 compound / 4 misleading), the `purpose` field on each entry, the strict `ALL:` match rule for compound (every listed Skill must fire), and which messy-prompt patterns from skill-creator I used and which I deliberately skipped.
 - **[`prompts/06-eval-misses-analysis.md`](./prompts/06-eval-misses-analysis.md)** — post-eval writeup: 100% trigger / 100% safety / 50% ambiguous, the two ambiguous misses, the trade-off introduced by the `NO_SKILL_FALLBACK_INSTRUCTION` wrapper, and why we accepted the trade rather than re-tuning.
 
 ---

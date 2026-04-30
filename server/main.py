@@ -59,11 +59,19 @@ KNOWN_SKILLS = {
 # user-facing reply verbatim inside `message`, so nothing is lost in
 # translation.
 NO_SKILL_FALLBACK_INSTRUCTION = (
-    "Output contract for non-Skill responses: if your reply does not invoke "
-    "a Skill — for example because the request is destructive (force-push, "
-    "branch deletion, tag deletion), out-of-scope (anything outside "
-    "`.github/workflows/`), or simply doesn't match any available Skill — "
-    "your final assistant message must be a single JSON code block:\n\n"
+    "Output contract for this request:\n\n"
+    "1. If the user's request enumerates multiple distinct CI/CD concerns "
+    "that map to different Skills (for example: tests AND security scanning "
+    "AND dependency auditing AND release automation), invoke each relevant "
+    "Skill in turn. The Skills are independent and can run sequentially in "
+    "the same session — each one will produce its own JSON output block at "
+    "the end of its execution. Do not pick just one Skill and skip the "
+    "others when the user has clearly asked for several.\n\n"
+    "2. If your reply does not invoke any Skill — for example because the "
+    "request is destructive (force-push, branch deletion, tag deletion), "
+    "out-of-scope (anything outside `.github/workflows/`), or simply doesn't "
+    "match any available Skill — your final assistant message must be a "
+    "single JSON code block:\n\n"
     "```json\n"
     '{"skill": null, "status": "refused", '
     '"message": "<your full reply to the user, multi-line markdown allowed>"}\n'
@@ -71,7 +79,7 @@ NO_SKILL_FALLBACK_INSTRUCTION = (
     "The `message` field is verbatim what the user will read — write it as "
     "you normally would (explanations, alternatives, clarifying questions). "
     "Do not add prose around the JSON block. When a Skill IS invoked, follow "
-    "the Skill's own JSON contract — this rule does not apply.\n\n"
+    "the Skill's own JSON contract — rule 2 does not apply.\n\n"
     "User request: "
 )
 
@@ -100,6 +108,10 @@ class RunResponse(BaseModel):
     # Surface CLI stderr only when the run produced something — empty list
     # otherwise. Useful for spotting non-fatal warnings the SDK swallows.
     stderr_lines: list[str] = []
+    # Names of every Skill that emitted a JSON output during the run, in
+    # invocation order. For single-Skill prompts this matches `output.skill`;
+    # for compound prompts that chained multiple Skills it lists all of them.
+    skills_invoked: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +288,7 @@ async def run_endpoint(req: RunRequest) -> RunResponse:
             cost_usd=result.cost_usd,
             parse_error=result.parse_error,
             stderr_lines=result.stderr_lines,
+            skills_invoked=result.skills_invoked,
         )
     except HTTPException:
         raise
@@ -477,6 +490,7 @@ async def run_skill_endpoint(name: str, req: RunRequest) -> RunResponse:
             cost_usd=result.cost_usd,
             parse_error=result.parse_error,
             stderr_lines=result.stderr_lines,
+            skills_invoked=result.skills_invoked,
         )
     except HTTPException:
         raise

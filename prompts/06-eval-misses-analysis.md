@@ -112,9 +112,10 @@ Run the eval against the live URL with:
 .venv/bin/python eval/run_eval.py https://cicd-demo.zeabur.app
 ```
 
-Each run takes ~25 minutes (the eval set was redesigned to 20 prompts
-after this writeup; see `prompts/05-eval-prompt-design.md`) and costs
-~$6–10 of OAuth-billed quota. The harness is idempotent — once the
+Each run takes ~25–30 minutes (the eval set was redesigned to 21 prompts
+with strict `ALL:` matching for compound after this writeup; see
+`prompts/05-eval-prompt-design.md`) and costs ~$6–12 of OAuth-billed
+quota. The harness is idempotent — once the
 four workflow files are on `claude/ci-demo`, every Skill run returns
 `no_change` instead of producing a new commit, so re-running the eval
 does not spam the demo branch.

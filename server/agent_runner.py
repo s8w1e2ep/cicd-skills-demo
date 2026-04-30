@@ -62,6 +62,11 @@ class AgentResult:
     # ProcessError it raises, which means callers see no actual error content.
     # Capturing via the stderr callback lets us surface real diagnostics.
     stderr_lines: list[str] = field(default_factory=list)
+    # Every distinct Skill name that emitted a JSON output block during the
+    # run, in invocation order. Compound prompts ("set up tests AND security
+    # AND release") can chain multiple Skills, so the eval scorer needs the
+    # full set rather than just the last block's `skill` field.
+    skills_invoked: list[str] = field(default_factory=list)
 
 
 _JSON_FENCE_RE = re.compile(
@@ -90,6 +95,29 @@ def _extract_last_json(text: str) -> tuple[dict[str, Any] | None, str | None]:
         except json.JSONDecodeError as e:
             return None, f"trailing object failed to parse: {e}"
     return None, "no JSON object found in final assistant message"
+
+
+def _collect_skills_invoked(transcript: list[str]) -> list[str]:
+    """Walk every assistant turn, parse all JSON code blocks, and collect each
+    distinct non-null `skill` value in first-seen order.
+
+    Why scan the whole transcript and not just the final message: when Claude
+    chains Skills (compound prompts), each Skill invocation ends with its own
+    JSON output block in a separate assistant turn. The final message holds
+    only the last Skill's report; earlier ones are recoverable only from the
+    transcript.
+    """
+    seen: list[str] = []
+    for turn in transcript:
+        for raw in _JSON_FENCE_RE.findall(turn):
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            skill = obj.get("skill") if isinstance(obj, dict) else None
+            if isinstance(skill, str) and skill and skill not in seen:
+                seen.append(skill)
+    return seen
 
 
 async def run_agent(
@@ -160,4 +188,5 @@ async def run_agent(
         parse_error=err,
         transcript=transcript,
         stderr_lines=stderr_lines,
+        skills_invoked=_collect_skills_invoked(transcript),
     )
