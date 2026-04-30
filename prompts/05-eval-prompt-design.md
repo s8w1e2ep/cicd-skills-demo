@@ -1,13 +1,13 @@
 # 05 — Eval prompt design
 
-The 20 entries in `eval/prompts.jsonl` were hand-written against an explicit shape. This file is the rationale: what each test case checks, why this distribution, and what I deliberately left out.
+The 21 entries in `eval/prompts.jsonl` were hand-written against an explicit shape. This file is the rationale: what each test case checks, why this distribution, and what I deliberately left out.
 
 ## The shape
 
 | Category | Count | What it tests | Match rule |
 |---|---:|---|---|
 | `single` | 12 | Purpose-clear prompts. The right Skill should fire and only that Skill. | `actual_skill == expected_skill` |
-| `compound` | 4 | Prompts that explicitly enumerate multiple concerns. Any one of the listed Skills firing counts as a pass. | `actual_skill ∈ acceptable_set` (encoded as `ANY:a,b,c`) |
+| `compound` | 5 | Prompts that explicitly enumerate multiple concerns. **All** the listed Skills must fire. | `expected_skills ⊆ skills_invoked` (encoded as `ALL:a,b,c`) |
 | `misleading` | 4 | Destructive or out-of-scope requests that share keywords with a Skill. Must refuse. | `actual_status == "refused"` |
 
 Each entry also carries a `purpose` field — a one-line statement of *what specifically the test is verifying*. The harness reproduces that field in the misses section of the markdown report so a reader can read down a list of failures and immediately see why each case was added (which is the bit that's hardest to recover from `git blame` alone).
@@ -33,18 +33,27 @@ Stack-agnostic by construction: no prompt mentions `pytest`, `npm`, `pip`, `pack
 
 The two English prompts per Skill are deliberately phrased differently from each other so a precision miss isn't blamed on a single quirky string.
 
-## `compound` — 4 prompts, multi-Skill intent
+## `compound` — 5 prompts, expect every listed Skill to fire
 
-These prompts explicitly enumerate two or three Skill-relevant concerns in a single ask. Behaviourally, our system only fires *one* Skill per `/run` call (the SKILL.md output schema has a single `skill:` field), so the match rule is "any of the listed Skills counts as a pass." That admits the question this category is really asking: does Claude pick *something reasonable*, or does it freeze and refuse because the prompt looks too broad to map onto one Skill cleanly?
+These prompts explicitly enumerate multiple Skill-relevant concerns in a single ask. The match rule is **strict**: every Skill named in `ALL:a,b,c` must appear in the response's `skills_invoked` list, which the agent runner builds by walking the full transcript and collecting the `skill` field from every JSON code block emitted during the run.
 
-| Prompt | Acceptable Skills | Why this shape |
+| Prompt | Required Skills | Why this shape |
 |---|---|---|
-| "give me the full CI starter pack — tests, security scanning, and check my deps for vulnerabilities" | lint-and-test / security-scan / dependency-audit | Three concerns, equal weight. Tests Claude's tie-breaking. |
-| "make sure my code runs tests and gets security scanned before any PR can merge" | lint-and-test / security-scan | Two concerns gated by "before merge"; the "before merge" framing favours lint-and-test slightly. |
-| "set up the works — auto tests on push, build artifacts on tag, and security scanning" | lint-and-test / build-and-release / security-scan | Three concerns spanning distinct trigger phases (push / tag / continuous). |
-| "我想要 CI 同時做測試、掃 leaked secrets、跟掃套件漏洞" | lint-and-test / security-scan / dependency-audit | ZH compact enumeration; verifies the same multi-concern shape works in Chinese. |
+| "give me the full CI starter pack — tests, security scanning, and check my deps for vulnerabilities" | lint-and-test, security-scan, dependency-audit | Three concerns, equal weight. |
+| "make sure my code runs tests and gets security scanned before any PR can merge" | lint-and-test, security-scan | Two concerns gated by "before merge"; the smallest compound case. |
+| "set up the works — auto tests on push, build artifacts on tag, and security scanning" | lint-and-test, build-and-release, security-scan | Three concerns spanning distinct trigger phases (push / tag / continuous). |
+| "我想要 CI 同時做測試、掃 leaked secrets、跟掃套件漏洞" | lint-and-test, security-scan, dependency-audit | ZH compact enumeration. |
+| "幫我建立一個完整的 CICD 流程" | lint-and-test, dependency-audit, security-scan, build-and-release | Umbrella ask with no enumeration; expects Claude to interpret "完整 CICD 流程" as covering all four available Skills. |
 
-What this category is *not* checking: whether Claude actually fires multiple Skills. It cannot, given the current output contract. A future iteration where SKILL.md emits multiple JSON blocks (one per Skill) would let `compound` upgrade from "any of" to "all of"; that's a v2 question.
+### How multi-Skill firing works in this codebase
+
+Three pieces collaborate to make `compound` a meaningful category:
+
+1. **The `NO_SKILL_FALLBACK_INSTRUCTION` wrapper** (in `server/main.py`) explicitly tells Claude that when a prompt enumerates multiple distinct concerns, it should invoke each relevant Skill in turn rather than picking just one.
+2. **`agent_runner._collect_skills_invoked`** walks every assistant turn in the transcript, parses each JSON code block, and records each non-null `skill` value once in invocation order. The resulting list is surfaced as `skills_invoked` on the API response.
+3. **The `ALL:` match rule in `run_eval.evaluate_one`** treats `expected_skill` as a set and verifies the response's `skills_invoked` is a superset.
+
+Without all three, `compound` quietly degrades to `single` (Claude picks one, scorer can't tell). Whether Claude actually chains Skills end-to-end is the empirical question this category puts under the harness.
 
 ## `misleading` — 4 prompts, must refuse
 
@@ -65,7 +74,7 @@ Skill-creator says:
 
 > Include file paths, personal context, column names, company names, URLs, backstory, mixed case/abbreviations/typos, and varying lengths.
 
-The 20 prompts lean into that explicitly. Worked examples:
+The 21 prompts lean into that explicitly. Worked examples:
 
 | Pattern | Prompt fragment |
 |---|---|
@@ -83,4 +92,4 @@ Deliberately **not** included: file paths, company names, project names. The rep
 - **Stage-2 evals**: per-Skill eval that checks not just *which* Skill fired but *what it produced* (right YAML, right branch state, right JSON shape). Out of scope for v1 — the routing eval already covers the trigger-precision scoring axis.
 - **Counter-prompts for ambiguous corners**: e.g. "is the lint-and-test workflow too noisy?" — should *not* fire `lint-and-test` (debugging is not a Skill). Currently the misleading category covers destructive cases but not "looks-like-Skill-domain-but-isn't" cases.
 
-For the time budget, these are deferred — the 20 prompts as designed surface the most likely failure modes, and the harness can grow without changing shape.
+For the time budget, these are deferred — the 21 prompts as designed surface the most likely failure modes, and the harness can grow without changing shape.

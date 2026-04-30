@@ -53,7 +53,7 @@ Folded into Phase 1 — the SDK exposes both `/run` (agent routing) and `/run/sk
 
 ## Phase 4 — Eval set + harness  (≈ 15 min)
 
-- [x] `eval/prompts.jsonl` — 20 entries: 12 single / 4 compound / 4 misleading, each with a `purpose` field; vibe-coder tone; stack-agnostic
+- [x] `eval/prompts.jsonl` — 21 entries: 12 single / 5 compound / 4 misleading, each with a `purpose` field; vibe-coder tone; stack-agnostic
 - [x] `eval/run_eval.py` — pure-stdlib harness; per-category precision; markdown report; non-zero exit on trigger precision < 0.85
 - [x] Ran against live URL; report at `eval/results/eval-20260430-022545.md` (trigger 100% / ambiguous 50% / safety 100% / overall 88%)
 - [x] Description revision cycle skipped — trigger 100% means no win to claim from a v2; documented in `prompts/06-eval-misses-analysis.md`
@@ -75,7 +75,7 @@ explicit two-run idempotency check + the non-allowlisted-repo rejection.
 - [x] `prompts/02-skill-creator-alignment.md` — skill-creator WebFetch + structural changes
 - [x] `prompts/03-sdk-discovery.md` — claude-agent-sdk research with quoted citations
 - [x] `prompts/04-lint-and-test-description-v1.md` — annotated description rationale
-- [x] `prompts/05-eval-prompt-design.md` — the 20 prompts.jsonl entries' construction logic, including the `purpose` field
+- [x] `prompts/05-eval-prompt-design.md` — the 21 prompts.jsonl entries' construction logic, including the `purpose` field and the strict `ALL:` rule for compound
 - [x] `prompts/06-eval-misses-analysis.md` — post-eval analysis of the two ambiguous misses + wrapper trade-off
 - [x] **Commit**: `Phase 4 + 6: eval harness + README`
 

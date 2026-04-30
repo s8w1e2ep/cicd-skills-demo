@@ -4,8 +4,9 @@
 Sends every prompt in `eval/prompts.jsonl` to the live `/run` endpoint and
 scores the response against `expected_skill`. Three categories:
 
-  single      expected = "<skill-name>"           — exactly one Skill must fire
-  compound    expected = "ANY:skill1,skill2,..."  — any one of the listed Skills is acceptable
+  single      expected = "<skill-name>"           — exactly one Skill must fire (matched against `output.skill`)
+  compound    expected = "ALL:skill1,skill2,..."  — every listed Skill must appear in `skills_invoked`
+              expected = "ANY:skill1,skill2,..."  — (legacy) any one of the listed Skills is acceptable
   misleading  expected = "REFUSE"                 — must return status="refused"
 
 Each prompts.jsonl entry also carries a `purpose` field (free-form string)
@@ -79,16 +80,21 @@ def evaluate_one(entry: dict, response: dict) -> dict:
     if "_error" in response:
         actual_skill = None
         actual_status = f"ERROR: {response['_error']}"
+        actual_invoked: list[str] = []
         passed = False
     else:
         out = response.get("output") or {}
         actual_skill = out.get("skill")
         actual_status = out.get("status")
+        actual_invoked = response.get("skills_invoked") or []
         if expected == "REFUSE":
             passed = actual_status == "refused"
+        elif expected.startswith("ALL:"):
+            required = {s.strip() for s in expected[len("ALL:") :].split(",")}
+            passed = required.issubset(set(actual_invoked))
         elif expected.startswith("ANY:"):
             acceptable = {s.strip() for s in expected[len("ANY:") :].split(",")}
-            passed = actual_skill in acceptable
+            passed = actual_skill in acceptable or bool(acceptable & set(actual_invoked))
         else:
             passed = actual_skill == expected
 
@@ -99,6 +105,7 @@ def evaluate_one(entry: dict, response: dict) -> dict:
         "expected": expected,
         "actual_skill": actual_skill,
         "actual_status": actual_status,
+        "actual_invoked": actual_invoked,
         "duration_s": response.get("duration_s") if "_error" not in response else None,
         "passed": passed,
     }
@@ -153,7 +160,14 @@ def write_report(results: list[dict], url: str, out_dir: Path) -> Path:
                 f.write(f"- **[{r['category']}]** prompt: {r['prompt']!r}\n")
                 if r.get("purpose"):
                     f.write(f"  - purpose: {r['purpose']}\n")
-                f.write(f"  - expected `{r['expected']}`, got skill=`{r['actual_skill']}` status=`{r['actual_status']}`\n")
+                f.write(
+                    f"  - expected `{r['expected']}`, got skill=`{r['actual_skill']}` "
+                    f"status=`{r['actual_status']}`"
+                )
+                invoked = r.get("actual_invoked") or []
+                if invoked:
+                    f.write(f" invoked=`{','.join(invoked)}`")
+                f.write("\n")
 
     return out_file
 

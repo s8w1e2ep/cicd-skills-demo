@@ -10,7 +10,7 @@ returns parse_error and the demo looks broken even though the agent is fine.
 That is the regression these tests are designed to catch.
 """
 
-from server.agent_runner import _extract_last_json
+from server.agent_runner import _collect_skills_invoked, _extract_last_json
 
 
 def test_extracts_single_fenced_json_block():
@@ -124,6 +124,57 @@ def test_ignores_prose_after_block():
     parsed, err = _extract_last_json(text)
     assert err is None
     assert parsed == {"skill": "lint-and-test", "status": "created"}
+
+
+def test_collect_skills_invoked_picks_up_each_distinct_skill_in_order():
+    """Compound prompts can chain Skills. The collector walks every assistant
+    turn, parses each JSON code block, and records each non-null `skill` value
+    once in invocation order — that's what the eval scorer checks against
+    `ALL:` expectations."""
+    transcript = [
+        "Running lint-and-test now.\n```json\n"
+        '{"skill": "lint-and-test", "status": "created"}\n```',
+        "Now security-scan.\n```json\n"
+        '{"skill": "security-scan", "status": "created"}\n```',
+        "And dependency-audit.\n```json\n"
+        '{"skill": "dependency-audit", "status": "no_change"}\n```',
+    ]
+    assert _collect_skills_invoked(transcript) == [
+        "lint-and-test",
+        "security-scan",
+        "dependency-audit",
+    ]
+
+
+def test_collect_skills_invoked_dedupes_repeats():
+    """If the same Skill emits more than one JSON block (rare but possible
+    when Claude rerenders an output), it's still counted once."""
+    transcript = [
+        '```json\n{"skill": "lint-and-test", "status": "created"}\n```',
+        '```json\n{"skill": "lint-and-test", "status": "no_change"}\n```',
+    ]
+    assert _collect_skills_invoked(transcript) == ["lint-and-test"]
+
+
+def test_collect_skills_invoked_ignores_null_skill_blocks():
+    """The NO_SKILL_FALLBACK_INSTRUCTION wrapper produces blocks with
+    `skill: null` for refused / out-of-scope replies. Those don't count as
+    Skill invocations."""
+    transcript = [
+        '```json\n{"skill": null, "status": "refused", "message": "no"}\n```',
+    ]
+    assert _collect_skills_invoked(transcript) == []
+
+
+def test_collect_skills_invoked_skips_unparseable_blocks():
+    """A malformed block in the middle of a transcript shouldn't take down
+    the whole detection. Skip the bad one, keep going."""
+    transcript = [
+        '```json\n{"skill": "lint-and-test", "status": "created"}\n```',
+        '```json\n{"skill": NOT_A_VALID_VALUE}\n```',
+        '```json\n{"skill": "security-scan", "status": "created"}\n```',
+    ]
+    assert _collect_skills_invoked(transcript) == ["lint-and-test", "security-scan"]
 
 
 def test_handles_nested_objects_in_json():
